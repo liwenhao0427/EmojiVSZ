@@ -37,6 +37,8 @@ export const INITIAL_STATS: PlayerStats = {
 
   tempDamageMult: 0,
   tempAttackSpeedMult: 0,
+  heroTempDamageMult: 0,
+  heroTempAttackSpeedMult: 0,
   wave: 1,
 };
 
@@ -51,6 +53,7 @@ export const HERO_UNIT: Unit = {
   id: 'hero',
   name: 'Keyboard Warrior',
   emoji: '🦸‍♂️',
+  description: 'The commander. Gains energy over time to unleash a powerful ultimate attack.',
   type: 'MAGIC',
   damage: 10,
   range: 9999, 
@@ -67,16 +70,16 @@ export const HERO_UNIT: Unit = {
 
 // Temp Units for Draft
 export const TEMP_UNIT_POOL: Partial<Unit>[] = [
-  { name: "Cannon", emoji: '💣', type: 'ENGINEERING', damage: 50, maxCooldown: 2.5, hp: 100, range: 1200, maxHp: 100 },
-  { name: "Sniper Bot", emoji: '🔭', type: 'RANGED', damage: 100, maxCooldown: 4.0, hp: 50, range: 2000, maxHp: 50 },
-  { name: "Berzerker", emoji: '👺', type: 'MELEE', damage: 40, maxCooldown: 0.5, hp: 200, range: 150, maxHp: 200 },
+  { name: "Cannon", emoji: '💣', type: 'ENGINEERING', damage: 50, maxCooldown: 2.5, hp: 100, range: 1200, maxHp: 100, description: 'Fires a high-damage explosive shell at a slow rate.' },
+  { name: "Sniper Bot", emoji: '🔭', type: 'RANGED', damage: 100, maxCooldown: 4.0, hp: 50, range: 2000, maxHp: 50, description: 'Extremely long range and high damage, but very slow fire rate.' },
+  { name: "Berzerker", emoji: '👺', type: 'MELEE', damage: 40, maxCooldown: 0.5, hp: 200, range: 150, maxHp: 200, description: 'A furious melee attacker with a very fast attack speed.' },
 ];
 
 export const ENEMY_TYPES = [
-  { id: 'troll', emoji: '🤡', hp: 30, speed: 40, damage: 5, type: 'NORMAL' },
-  { id: 'hater', emoji: '😡', hp: 60, speed: 30, damage: 10, type: 'NORMAL' },
-  { id: 'bot', emoji: '🤖', hp: 120, speed: 20, damage: 15, type: 'ELITE' },
-  { id: 'boss', emoji: '👹', hp: 1000, speed: 15, damage: 50, type: 'BOSS' },
+  { id: 'troll', emoji: '🤡', hp: 30, speed: 40, damage: 5, type: 'NORMAL', description: 'A standard, numerous foe. Weak but annoying.' },
+  { id: 'hater', emoji: '😡', hp: 60, speed: 30, damage: 10, type: 'NORMAL', description: 'Slightly tougher than a troll, with more health.' },
+  { id: 'bot', emoji: '🤖', hp: 120, speed: 20, damage: 15, type: 'ELITE', description: 'A durable elite unit that can absorb significant damage.' },
+  { id: 'boss', emoji: '👹', hp: 1000, speed: 15, damage: 50, type: 'BOSS', description: 'A massive threat. Extremely high health and damage.' },
 ];
 
 export const WAVE_CONFIG = [

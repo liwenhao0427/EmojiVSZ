@@ -1,6 +1,6 @@
 
 
-import { Unit, Enemy, Projectile, FloatingText, GamePhase, PlayerStats, AmmoBayState, InspectableEntity } from '../types';
+import { Unit, Enemy, Projectile, FloatingText, GamePhase, PlayerStats, AmmoBayState, InspectableEntity, StatsBreakdown, WeaponClass } from '../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG, ENEMY_TYPES } from '../constants';
 import { useGameStore } from '../store/useGameStore';
 
@@ -183,23 +183,33 @@ export class GameEngine {
   
   private findEntityAt(mx: number, my: number): InspectableEntity {
       // 1. Check Units (Grid)
-      // Reverse iterate to catch top layer if needed (though grid is single layer)
       const store = useGameStore.getState();
-      const units = store.gridUnits;
+      const { stats, gridUnits } = store;
       
       const { c, r } = this.getGridPosFromCoords(mx, my);
       if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
-          const unit = units.find(u => u.row === r && u.col === c);
-          if (unit) return { type: 'UNIT', data: unit };
+          const unit = gridUnits.find(u => u.row === r && u.col === c);
+          if (unit) {
+             const u = unit;
+             const typeBonus = u.type === 'MELEE' ? stats.meleeDmg : u.type === 'RANGED' ? stats.rangedDmg : u.type === 'MAGIC' ? stats.elementalDmg : stats.engineering;
+             const breakdown: StatsBreakdown = {
+                 damage: { base: u.damage, bonus: typeBonus, multiplier: 1 + stats.damagePercent / 100 },
+                 cooldown: { base: u.maxCooldown, multiplier: 1 + stats.attackSpeed / 100 }
+             };
+             return { type: 'UNIT', data: unit, statsBreakdown: breakdown };
+          }
       }
 
       // 2. Check Enemies (Distance)
-      // Check in reverse order (top rendered first)
       for (let i = this.enemies.length - 1; i >= 0; i--) {
           const e = this.enemies[i];
           const dist = Math.hypot(e.x - mx, e.y - my);
           if (dist <= e.radius) {
-              return { type: 'ENEMY', data: e };
+              const breakdown: StatsBreakdown = {
+                  damage: { base: e.damage, bonus: 0, multiplier: 1 },
+                  cooldown: { base: 1.0, multiplier: 1 } // Enemy attack speed is fixed
+              };
+              return { type: 'ENEMY', data: e, statsBreakdown: breakdown };
           }
       }
       
@@ -218,24 +228,32 @@ export class GameEngine {
   }
 
   private refreshInspectionData(id: string | number) {
-       // Re-fetch the data for the locked ID to keep UI updated (e.g. Health bars decreasing)
        const store = useGameStore.getState();
+       const { stats } = store;
        
        if (typeof id === 'string') {
-           // Unit
            const unit = store.gridUnits.find(u => u.id === id);
-           if (unit) this.callbacks?.onInspect?.({ type: 'UNIT', data: unit });
-           else {
-               // Unit died or moved?
-               this.selectedEntityId = null; // Unlock
+           if (unit) {
+                const u = unit;
+                const typeBonus = u.type === 'MELEE' ? stats.meleeDmg : u.type === 'RANGED' ? stats.rangedDmg : u.type === 'MAGIC' ? stats.elementalDmg : stats.engineering;
+                const breakdown: StatsBreakdown = {
+                    damage: { base: u.damage, bonus: typeBonus, multiplier: 1 + stats.damagePercent / 100 },
+                    cooldown: { base: u.maxCooldown, multiplier: 1 + stats.attackSpeed / 100 }
+                };
+                this.callbacks?.onInspect?.({ type: 'UNIT', data: unit, statsBreakdown: breakdown });
+           } else {
+               this.selectedEntityId = null;
                this.callbacks?.onInspect?.(null);
            }
        } else {
-           // Enemy
            const enemy = this.enemies.find(e => e.id === id);
-           if (enemy) this.callbacks?.onInspect?.({ type: 'ENEMY', data: enemy });
-           else {
-               // Enemy died
+           if (enemy) {
+                const breakdown: StatsBreakdown = {
+                    damage: { base: enemy.damage, bonus: 0, multiplier: 1 },
+                    cooldown: { base: 1.0, multiplier: 1 }
+                };
+                this.callbacks?.onInspect?.({ type: 'ENEMY', data: enemy, statsBreakdown: breakdown });
+           } else {
                this.selectedEntityId = null;
                this.callbacks?.onInspect?.(null);
            }
@@ -310,6 +328,7 @@ export class GameEngine {
                   maxHp: typeData.hp,
                   speed: typeData.speed,
                   emoji: typeData.emoji,
+                  description: typeData.description,
                   type: typeData.type as any,
                   damage: typeData.damage,
                   row: row,
@@ -327,6 +346,9 @@ export class GameEngine {
       const store = useGameStore.getState();
       units.forEach(u => {
           if (u.isDead || this.dragUnitId === u.id) return;
+          
+          let heroDmgBuff = 1.0;
+          let heroAspdBuff = 1.0;
 
           if (u.isHero) {
               store.updateHeroEnergy(5 * dt);
@@ -334,6 +356,8 @@ export class GameEngine {
                   this.triggerUltimate(u);
                   store.updateHeroEnergy(-100); 
               }
+              heroDmgBuff += (store.stats.heroTempDamageMult || 0);
+              heroAspdBuff += (store.stats.heroTempAttackSpeedMult || 0);
           }
 
           let cd = this.unitCooldowns.get(u.id) || 0;
@@ -351,7 +375,7 @@ export class GameEngine {
 
           if (target) {
               this.fireProjectile(u, unitX, GRID_OFFSET_Y + (u.row * CELL_SIZE) + CELL_SIZE/2, target);
-              const buff = 1 + store.stats.tempAttackSpeedMult + (store.stats.attackSpeed / 100);
+              const buff = (1 + store.stats.tempAttackSpeedMult + (store.stats.attackSpeed / 100)) * heroAspdBuff;
               this.unitCooldowns.set(u.id, u.maxCooldown / buff);
           }
       });
@@ -370,27 +394,20 @@ export class GameEngine {
 
   private fireProjectile(u: Unit, x: number, y: number, target: Enemy) {
       const store = useGameStore.getState();
-      const damage = u.damage * (1 + store.stats.tempDamageMult + store.stats.damagePercent/100);
-
-      if (u.type === 'MELEE') {
-          target.hp -= damage;
-          target.x += 40; // Significant Knockback
-          target.hitFlash = 0.2; 
-          this.addText(target.x, target.y, `-${Math.round(damage)}`, 'white');
-          if (target.hp <= 0) this.killEnemy(target);
-          return;
-      }
+      const heroDmgBuff = u.isHero ? (1 + (store.stats.heroTempDamageMult || 0)) : 1;
+      const damage = u.damage * (1 + store.stats.tempDamageMult + store.stats.damagePercent/100) * heroDmgBuff;
 
       this.projectiles.push({
           id: Math.random(),
           x, y,
           vx: 600, vy: 0,
           damage,
-          emoji: u.emoji,
+          emoji: u.type === 'MELEE' ? '🔪' : u.emoji,
           radius: 10,
           markedForDeletion: false,
           type: u.type === 'MAGIC' ? 'TRACKING' : 'LINEAR',
-          targetId: target.id
+          targetId: target.id,
+          originType: u.type,
       });
   }
 
@@ -456,6 +473,9 @@ export class GameEngine {
           if (target) {
               target.hp -= p.damage;
               target.hitFlash = 0.2;
+              if (p.originType === 'MELEE') {
+                  target.x += 20; // Knockback
+              }
               this.addText(target.x, target.y, `-${Math.round(p.damage)}`, 'yellow');
               if (target.hp <= 0) this.killEnemy(target);
               p.markedForDeletion = true;
@@ -731,8 +751,14 @@ export class GameEngine {
       // 1. Lock Inspection
       if (entity) {
           const id = entity.type === 'UNIT' ? entity.data.id : entity.data.id;
-          this.selectedEntityId = id;
-          this.callbacks?.onInspect?.(entity);
+          // Toggle lock
+          if (this.selectedEntityId === id) {
+              this.selectedEntityId = null;
+              this.callbacks?.onInspect?.(this.findEntityAt(this.mouseX, this.mouseY)); // Show hover info again
+          } else {
+              this.selectedEntityId = id;
+              this.callbacks?.onInspect?.(entity);
+          }
       } else {
           // Clicked empty space -> Unlock
           this.selectedEntityId = null;

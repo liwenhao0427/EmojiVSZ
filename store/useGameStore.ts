@@ -54,6 +54,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
              id: uuidv4(),
              name: 'Militia',
              emoji: '🔫',
+             description: 'A basic ranged defender. Reliable but not exceptional.',
              type: 'RANGED',
              damage: 8,
              range: 2000, 
@@ -220,7 +221,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const nextStats = {
               ...state.stats,
               tempDamageMult: 0,
-              tempAttackSpeedMult: 0
+              tempAttackSpeedMult: 0,
+              heroTempDamageMult: 0,
+              heroTempAttackSpeedMult: 0,
           };
 
           return {
@@ -237,13 +240,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const nextState: Partial<GameStore> = {}; 
 
           if (option.type === 'TEMP_UNIT') {
-             // Logic handled by addUnit, but here we need to insert manually into state to be safe or call get().addUnit
-             // Since we are in set(), we can call get().addUnit? No, better duplicate logic or keep simple.
-             // We can just use the addUnit logic logic here roughly:
              const units = [...state.gridUnits];
              const data = option.data as Partial<Unit>;
              
-             // Find empty slot
              let placed = false;
              for (let c = 0; c < GRID_COLS; c++) {
                 for (let r = 0; r < GRID_ROWS; r++) {
@@ -270,11 +269,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
              }
              nextState.gridUnits = units;
           } else if (option.type === 'TEMP_BUFF') {
-              const buff = option.data as { damage?: number, attackSpeed?: number };
+              const buff = option.data as { damage?: number, attackSpeed?: number, heroDamage?: number, heroAttackSpeed?: number };
               nextState.stats = { 
                   ...state.stats, 
                   tempDamageMult: state.stats.tempDamageMult + (buff.damage || 0),
-                  tempAttackSpeedMult: state.stats.tempAttackSpeedMult + (buff.attackSpeed || 0)
+                  tempAttackSpeedMult: state.stats.tempAttackSpeedMult + (buff.attackSpeed || 0),
+                  heroTempDamageMult: (state.stats.heroTempDamageMult || 0) + (buff.heroDamage || 0),
+                  heroTempAttackSpeedMult: (state.stats.heroTempAttackSpeedMult || 0) + (buff.heroAttackSpeed || 0),
               };
           }
           return nextState;

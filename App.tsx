@@ -16,6 +16,7 @@ export default function App() {
   const { phase, setPhase, initGame, stats, startNextWave, applyDraft } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
+  const waveStartedRef = useRef(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [inspectedEntity, setInspectedEntity] = useState<InspectableEntity>(null);
@@ -90,7 +91,8 @@ export default function App() {
     }
     
     // Wave Start
-    if (phase === GamePhase.COMBAT && !showLevelUp) {
+    if (phase === GamePhase.COMBAT && !showLevelUp && waveStartedRef.current !== stats.wave) {
+        waveStartedRef.current = stats.wave;
         const config = WAVE_CONFIG.find(w => w.wave === stats.wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
         engineRef.current?.startWave(config.duration, stats.wave);
     }
@@ -100,6 +102,7 @@ export default function App() {
     initGame();
     setShowLevelUp(false);
     setInspectedEntity(null);
+    waveStartedRef.current = 0;
   };
 
   const handleStartGame = () => {

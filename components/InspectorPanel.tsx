@@ -18,7 +18,7 @@ const StatRow = ({ icon: Icon, label, value, tooltip, color }: any) => (
         <div className="font-mono font-bold text-sm">{value}</div>
         
         {/* Tooltip */}
-        <div className="hidden group-hover:block absolute right-full top-0 mr-2 w-48 bg-black/90 p-2 rounded border border-white/20 z-50 text-[10px] text-gray-300 pointer-events-none">
+        <div className="hidden group-hover:block absolute right-full top-0 mr-2 w-48 bg-black/90 p-2 rounded border border-white/20 z-50 text-[10px] text-gray-300 pointer-events-none whitespace-pre-wrap">
             {tooltip}
         </div>
     </div>
@@ -30,37 +30,29 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
   if (!entity) return null;
 
   const isUnit = entity.type === 'UNIT';
-  const data = entity.data;
+  const { data, statsBreakdown } = entity;
 
   // Calculate dynamic stats for Units based on global player stats
-  let finalDamage = data.damage;
-  let finalCooldown = 'attackTimer' in data ? (data as any).attackTimer : (data as any).maxCooldown;
+  let finalDamage = Math.round(
+      (statsBreakdown.damage.base + statsBreakdown.damage.bonus) * statsBreakdown.damage.multiplier
+  );
+  let finalCooldown = (statsBreakdown.cooldown.base / statsBreakdown.cooldown.multiplier).toFixed(2);
   
-  // Formulas (Visual Only)
-  let dmgTooltip = `Base: ${data.damage}`;
-  let cdTooltip = `Base: ${finalCooldown}s`;
-
-  if (isUnit) {
-      const u = data as any;
-      const typeBonus = 
-        u.type === 'MELEE' ? stats.meleeDmg : 
-        u.type === 'RANGED' ? stats.rangedDmg : 
-        u.type === 'MAGIC' ? stats.elementalDmg : stats.engineering;
-      
-      finalDamage = Math.round((u.damage + typeBonus) * (1 + stats.damagePercent/100));
-      dmgTooltip = `Base: ${u.damage}\nType Bonus: +${typeBonus}\nGlobal: +${stats.damagePercent}%`;
-
-      finalCooldown = (u.maxCooldown / (1 + stats.attackSpeed/100)).toFixed(2);
-      cdTooltip = `Base: ${u.maxCooldown}s\nAtk Spd: +${stats.attackSpeed}%`;
+  if (!isUnit) {
+      finalDamage = data.damage;
+      finalCooldown = (data as any).attackTimer > 0 ? (data as any).attackTimer.toFixed(2) : statsBreakdown.cooldown.base.toFixed(2);
   }
+
+  let dmgTooltip = `Base: ${statsBreakdown.damage.base}\nBonus: +${statsBreakdown.damage.bonus}\nMultiplier: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
+  let cdTooltip = `Base: ${statsBreakdown.cooldown.base}s\nMultiplier: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
 
   const hpPct = Math.max(0, data.hp / data.maxHp) * 100;
 
   return (
-    <div className="absolute right-4 top-24 w-64 glass-panel rounded-xl p-4 border border-white/10 animate-in slide-in-from-right duration-300 pointer-events-none">
+    <div className="absolute right-4 top-24 w-64 glass-panel rounded-xl p-4 border border-white/10 animate-in slide-in-from-right duration-300 pointer-events-auto">
         
         {/* Header */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-4 mb-3">
             <div className="w-14 h-14 bg-slate-800 rounded-lg flex items-center justify-center text-4xl shadow-inner border border-white/5">
                 {data.emoji}
             </div>
@@ -73,6 +65,13 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
                 </span>
             </div>
         </div>
+        
+        {/* Description */}
+        {data.description && (
+            <p className="text-xs text-gray-300 mb-3 bg-black/20 p-2 rounded border border-white/5 leading-normal">
+                {data.description}
+            </p>
+        )}
 
         {/* Health Bar */}
         <div className="mb-4">
@@ -125,7 +124,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
         </div>
 
         <div className="mt-4 text-[10px] text-gray-500 text-center italic">
-            {isUnit ? "Click unit to lock view" : "Enemy unit"}
+            Click on entities to lock/unlock view
         </div>
     </div>
   );

@@ -8,6 +8,7 @@ export interface Unit {
   id: string;
   name: string;
   emoji: string;
+  description?: string;
   type: WeaponClass;
   
   // Combat Stats
@@ -67,6 +68,8 @@ export interface PlayerStats {
   // Temporary Wave Buffs (Reset every wave)
   tempDamageMult: number;
   tempAttackSpeedMult: number;
+  heroTempDamageMult?: number;
+  heroTempAttackSpeedMult?: number;
   
   // Meta
   wave: number;
@@ -85,7 +88,7 @@ export interface DraftOption {
   id: string;
   type: 'TEMP_UNIT' | 'TEMP_BUFF';
   description: string;
-  data: Partial<Unit> | { damage?: number, attackSpeed?: number };
+  data: Partial<Unit> | { damage?: number; attackSpeed?: number; heroDamage?: number; heroAttackSpeed?: number };
   emoji: string;
   name: string;
   value?: number; // For UI display
@@ -106,6 +109,7 @@ export interface Enemy extends Entity {
   maxHp: number;
   speed: number;
   emoji: string;
+  description?: string;
   type: 'NORMAL' | 'ELITE' | 'BOSS';
   damage: number;
   row: number; 
@@ -124,6 +128,7 @@ export interface Projectile extends Entity {
   emoji: string;
   type: 'LINEAR' | 'ARC' | 'TRACKING';
   targetId?: number; 
+  originType: WeaponClass;
 }
 
 export interface FloatingText {
@@ -176,10 +181,17 @@ export interface ShopItem {
 }
 
 // Union type for inspection
+export type StatsBreakdown = {
+    damage: { base: number; bonus: number; multiplier: number };
+    cooldown: { base: number; multiplier: number };
+};
+
 export type InspectableEntity = {
     type: 'UNIT';
     data: Unit;
+    statsBreakdown: StatsBreakdown;
 } | {
     type: 'ENEMY';
     data: Enemy;
+    statsBreakdown: StatsBreakdown;
 } | null;

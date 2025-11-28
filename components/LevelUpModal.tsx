@@ -15,46 +15,40 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
   const [options, setOptions] = React.useState<DraftOption[]>([]);
 
   React.useEffect(() => {
-    // Generate 3 random Draft Options (Temp Unit or Hero Buff)
-    const newOptions: DraftOption[] = [];
-    
-    for (let i = 0; i < 3; i++) {
-        const isUnit = Math.random() > 0.5;
-        
-        if (isUnit) {
+    const baseOptions: Omit<DraftOption, 'id'>[] = [
+        // Option 1: Temp Unit
+        (() => {
             const template = TEMP_UNIT_POOL[Math.floor(Math.random() * TEMP_UNIT_POOL.length)];
-            newOptions.push({
-                id: uuidv4(),
+            return {
                 type: 'TEMP_UNIT',
                 name: `Merc: ${template.name}`,
                 emoji: template.emoji || '❓',
-                description: 'Deploys a powerful unit for ONE wave only.',
+                description: template.description || 'Deploys a powerful unit for ONE wave only.',
                 data: template
-            });
-        } else {
-            // Hero Buff
-            const isDmg = Math.random() > 0.5;
-            if (isDmg) {
-                newOptions.push({
-                    id: uuidv4(),
-                    type: 'TEMP_BUFF',
-                    name: 'Hero Rage',
-                    emoji: '😡',
-                    description: 'Hero deals +50% Damage this wave.',
-                    data: { damage: 0.5 }
-                });
-            } else {
-                 newOptions.push({
-                    id: uuidv4(),
-                    type: 'TEMP_BUFF',
-                    name: 'Hyper Speed',
-                    emoji: '⚡',
-                    description: 'Hero attacks +50% Faster this wave.',
-                    data: { attackSpeed: 0.5 }
-                });
-            }
+            };
+        })(),
+        // Option 2: Hero Buff
+        {
+            type: 'TEMP_BUFF',
+            name: 'Hero Overdrive',
+            emoji: '🚀',
+            description: 'Hero attacks 100% faster for this wave.',
+            data: { heroAttackSpeed: 1.0 }
+        },
+        // Option 3: Global Buff
+        {
+            type: 'TEMP_BUFF',
+            name: 'Battle Cry',
+            emoji: '🗣️',
+            description: 'All units deal +20% damage for this wave.',
+            data: { damage: 0.2 }
         }
-    }
+    ];
+
+    // Shuffle and pick 3
+    const shuffled = baseOptions.sort(() => 0.5 - Math.random());
+    const newOptions = shuffled.slice(0, 3).map(opt => ({...opt, id: uuidv4() }));
+
     setOptions(newOptions);
   }, [level]);
 
@@ -63,9 +57,9 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
       <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl max-w-4xl w-full border border-gray-700">
         <div className="text-center mb-8">
             <h2 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 animate-pulse">
-                REINFORCEMENTS!
+                LEVEL UP!
             </h2>
-            <p className="text-gray-400 mt-2">Draft temporary support for the next battle</p>
+            <p className="text-gray-400 mt-2">Choose an upgrade to continue the fight</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -85,14 +79,14 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
 
               <div>
                 <div className={`text-xs font-bold uppercase mb-1 px-2 py-1 rounded inline-block ${opt.type === 'TEMP_UNIT' ? 'bg-blue-900 text-blue-300' : 'bg-orange-900 text-orange-300'}`}>
-                    {opt.type === 'TEMP_UNIT' ? 'MERCENARY' : 'HERO BUFF'}
+                    {opt.type === 'TEMP_UNIT' ? 'MERCENARY' : 'WAVE BUFF'}
                 </div>
                 <h3 className="text-xl font-bold text-white mb-2">{opt.name}</h3>
                 <p className="text-gray-300 text-sm">{opt.description}</p>
               </div>
 
               <div className="w-full mt-4 py-3 bg-gray-800 rounded group-hover:bg-cyan-600/20 text-xs font-mono text-gray-400 group-hover:text-cyan-400 transition-colors uppercase tracking-widest">
-                 DRAFT
+                 SELECT
               </div>
             </button>
           ))}
