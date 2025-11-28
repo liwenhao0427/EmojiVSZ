@@ -5,6 +5,7 @@ import { EngineCallbacks } from '../index';
 import { useGameStore } from '../../../store/useGameStore';
 import { Unit, Enemy, Projectile, PlayerStats } from '../../../types';
 import { GRID_ROWS, GRID_OFFSET_Y, GRID_OFFSET_X, CELL_SIZE } from '../../../constants';
+import { ProjectileSystem } from './ProjectileSystem'; // 引入类型
 
 export class UnitSystem implements System {
   private unitCooldowns: Map<string, number> = new Map();
@@ -13,7 +14,8 @@ export class UnitSystem implements System {
     this.unitCooldowns.clear();
   }
 
-  update(dt: number, gameState: GameState, callbacks: EngineCallbacks) {
+  // 修改：args 接收其他 Systems 实例
+  update(dt: number, gameState: GameState, callbacks: EngineCallbacks, projectileSystem?: ProjectileSystem) {
     const store = useGameStore.getState();
     const { gridUnits } = store;
 
@@ -110,7 +112,7 @@ export class UnitSystem implements System {
           case 'STREAM':
           case 'SHOOT':
           default:
-              this.fireProjectile(u, unitX, unitY, target, gameState);
+              this.fireProjectile(u, unitX, unitY, target, gameState, projectileSystem);
               break;
       }
       
@@ -208,7 +210,8 @@ export class UnitSystem implements System {
     });
   }
 
-  private fireProjectile(u: Unit, x: number, y: number, target: Enemy | undefined, gameState: GameState) {
+  // 修改：接收 projectileSystem 参数以调用对象池
+  private fireProjectile(u: Unit, x: number, y: number, target: Enemy | undefined, gameState: GameState, projectileSystem?: ProjectileSystem) {
     const store = useGameStore.getState();
     const damage = this.calculateFinalDamage(u, store.stats);
     
@@ -231,7 +234,13 @@ export class UnitSystem implements System {
     });
 
     const addProjectile = (base: Omit<Projectile, 'id'>) => {
-        gameState.projectiles.push({ ...base, id: Math.random() });
+        if (projectileSystem) {
+            // 使用对象池生成
+            projectileSystem.spawnProjectile(gameState, base);
+        } else {
+            // 后备方案
+            gameState.projectiles.push({ ...base, id: Math.random() });
+        }
     }
 
     if (u.isHero && u.attackType === 'TRI_SHOT') {

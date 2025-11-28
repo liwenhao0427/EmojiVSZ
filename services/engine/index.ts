@@ -139,7 +139,8 @@ export class GameEngine {
     
     // Run systems in order
     this.enemySystem.update(dt, this.gameState, this.callbacks);
-    this.unitSystem.update(dt, this.gameState, this.callbacks);
+    // 关键修改：将 projectileSystem 传递给 unitSystem，以使用对象池
+    this.unitSystem.update(dt, this.gameState, this.callbacks, this.projectileSystem);
     this.projectileSystem.update(dt, this.gameState, this.callbacks);
     this.floatingTextSystem.update(dt, this.gameState, this.callbacks);
 

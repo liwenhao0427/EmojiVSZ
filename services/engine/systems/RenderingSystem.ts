@@ -1,11 +1,11 @@
 
-
 import { GameState } from '../GameState';
 import { Unit, InspectableEntity } from '../../../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../constants';
 import { useGameStore } from '../../../store/useGameStore';
 import { InputSystem } from './InputSystem';
 import { ENEMY_DATA } from '../../../data/enemies';
+import { EmojiSpriteCache } from '../utils/EmojiSpriteCache';
 
 interface VisualUnit {
   x: number;
@@ -17,6 +17,8 @@ interface VisualUnit {
 
 export class RenderingSystem {
   private visualUnits: Map<string, VisualUnit> = new Map();
+  // 1. 初始化缓存工具
+  private emojiCache: EmojiSpriteCache = new EmojiSpriteCache();
   
   constructor(private ctx: CanvasRenderingContext2D, private inputSystem: InputSystem) {}
 
@@ -161,28 +163,36 @@ export class RenderingSystem {
         this.ctx.restore();
     }
 
-    this.ctx.font = '60px Arial';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
+    // 替换原有的 ctx.fillText
+    // this.ctx.font = '60px Arial';
+    // this.ctx.fillText(u.emoji, 0, 0);
     
     if (u.state === 'ARMING') this.ctx.globalAlpha = 0.5 + Math.sin(performance.now() / 100) * 0.2;
     else this.ctx.globalAlpha = 1.0;
 
     if (u.isDead) {
       this.ctx.globalAlpha = 0.5;
-      this.ctx.fillText('🪦', 0, 0);
+      // 墓碑也可以缓存
+      this.emojiCache.draw(this.ctx, '🪦', 0, 0, 60);
     } else {
       if (u.isTemp) {
         this.ctx.shadowColor = 'cyan';
         this.ctx.shadowBlur = 10;
       }
-      this.ctx.fillStyle = 'white';
-      this.ctx.fillText(u.emoji, 0, 0);
+      
+      // 使用缓存绘制单位 Emoji
+      this.emojiCache.draw(this.ctx, u.emoji, 0, 0, 60);
+      
       this.ctx.globalAlpha = 1.0;
 
       if (vis.hitFlash > 0) {
         this.ctx.globalCompositeOperation = 'source-atop';
         this.ctx.fillStyle = `rgba(255, 255, 255, 0.7)`;
+        // 闪白效果目前还是用文字绘制遮罩比较方便，或者可以用滤镜，
+        // 为了性能这里保留 fillText 做闪白遮罩，因为这一帧很少
+        this.ctx.font = '60px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
         this.ctx.fillText(u.emoji, 0, 0);
         this.ctx.globalCompositeOperation = 'source-over';
       }
@@ -228,19 +238,25 @@ export class RenderingSystem {
 
       this.ctx.save();
       this.ctx.translate(drawX, e.y);
-      this.ctx.font = `${50 * scale}px Arial`;
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillStyle = 'white';
       
-      if (e.slowTimer && e.slowTimer > 0) this.ctx.fillStyle = '#67e8f9';
+      // 替换敌人绘制
+      if (e.slowTimer && e.slowTimer > 0) {
+         // 冰冻效果，简单绘制一个底色光圈
+         this.ctx.shadowColor = '#67e8f9';
+         this.ctx.shadowBlur = 10;
+      }
 
       this.ctx.globalAlpha = 1.0;
-      this.ctx.fillText(e.emoji, 0, 0);
+      // 使用缓存绘制敌人，大小计算：50px * scale
+      this.emojiCache.draw(this.ctx, e.emoji, 0, 0, 50 * scale);
 
       if (e.hitFlash && e.hitFlash > 0) {
         this.ctx.globalCompositeOperation = 'source-atop';
         this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        // 闪白处理同上
+        this.ctx.font = `${50 * scale}px Arial`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
         this.ctx.fillText(e.emoji, 0, 0);
         this.ctx.globalCompositeOperation = 'source-over';
       }
@@ -311,11 +327,10 @@ export class RenderingSystem {
         this.ctx.rotate(angle);
       }
       
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
+      // 替换子弹绘制
       if(p.emoji) {
-        this.ctx.font = '24px Arial';
-        this.ctx.fillText(p.emoji, 0, 0);
+        // 使用缓存绘制子弹
+        this.emojiCache.draw(this.ctx, p.emoji, 0, 0, 24);
       } else {
         this.ctx.fillStyle = 'yellow';
         this.ctx.beginPath();
