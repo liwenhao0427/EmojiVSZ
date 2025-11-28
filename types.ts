@@ -33,6 +33,9 @@ export interface Unit {
   // Grid Position (0-4 Row, 0-8 Col)
   row: number;
   col: number;
+
+  // New property for hero attack patterns
+  attackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT';
 }
 
 export interface PlayerStats {
@@ -73,6 +76,10 @@ export interface PlayerStats {
   
   // Meta
   wave: number;
+  
+  // New hero-specific stats for upgrades
+  heroEnergyGainRate?: number;
+  heroMaxEnergy?: number;
 }
 
 export enum GamePhase {
@@ -88,7 +95,16 @@ export interface DraftOption {
   id: string;
   type: 'TEMP_UNIT' | 'TEMP_BUFF';
   description: string;
-  data: Partial<Unit> | { damage?: number; attackSpeed?: number; heroDamage?: number; heroAttackSpeed?: number };
+  data: Partial<Unit> | { 
+      damage?: number; 
+      attackSpeed?: number; 
+      heroDamage?: number; 
+      heroAttackSpeed?: number;
+      // For hero-specific upgrades
+      heroAttackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT';
+      heroEnergyGainRate?: number; // As a multiplier, e.g. 0.5 for +50%
+      heroMaxEnergy?: number; // As a reduction, e.g., -20
+  };
   emoji: string;
   name: string;
   value?: number; // For UI display
@@ -119,6 +135,9 @@ export interface Enemy extends Entity {
   hitFlash?: number; 
   // Added for Inspection
   name?: string; 
+  // New properties for attack animation
+  attackState?: 'IDLE' | 'ATTACKING';
+  attackProgress?: number;
 }
 
 export interface Projectile extends Entity {

@@ -43,7 +43,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ...HERO_UNIT, 
         id: uuidv4(), 
         row: 2, 
-        col: 0 
+        col: 0,
+        attackType: 'LINEAR' as const // Explicitly set initial attack type
     };
     
     // 2. Place Basic Defenders
@@ -174,9 +175,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   updateHeroEnergy: (amount) => {
     set((state) => {
+      const energyGain = amount * (state.stats.heroEnergyGainRate || 1.0);
+      const maxEnergy = state.stats.heroMaxEnergy || 100;
       const units = state.gridUnits.map(u => {
         if (!u.isHero) return u;
-        return { ...u, energy: Math.min(100, (u.energy || 0) + amount) };
+        return { ...u, energy: Math.min(maxEnergy, (u.energy || 0) + energyGain) };
       });
       return { gridUnits: units };
     });
@@ -195,10 +198,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
               ...state.stats,
               heroLevel: 1,
               heroXp: 0,
-              heroMaxXp: 100,
+              heroMaxXp: INITIAL_STATS.maxXp,
               level: 1, // Sync with heroLevel
               xp: 0,
-              maxXp: 100,
+              maxXp: INITIAL_STATS.maxXp,
               wave: state.stats.wave + 1
           };
 
@@ -237,7 +240,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   applyDraft: (option) => {
       set(state => {
-          const nextState: Partial<GameStore> = {}; 
+          const nextState: Partial<Pick<GameStore, 'gridUnits' | 'stats'>> = {}; 
 
           if (option.type === 'TEMP_UNIT') {
              const units = [...state.gridUnits];
@@ -269,14 +272,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
              }
              nextState.gridUnits = units;
           } else if (option.type === 'TEMP_BUFF') {
-              const buff = option.data as { damage?: number, attackSpeed?: number, heroDamage?: number, heroAttackSpeed?: number };
-              nextState.stats = { 
-                  ...state.stats, 
-                  tempDamageMult: state.stats.tempDamageMult + (buff.damage || 0),
-                  tempAttackSpeedMult: state.stats.tempAttackSpeedMult + (buff.attackSpeed || 0),
-                  heroTempDamageMult: (state.stats.heroTempDamageMult || 0) + (buff.heroDamage || 0),
-                  heroTempAttackSpeedMult: (state.stats.heroTempAttackSpeedMult || 0) + (buff.heroAttackSpeed || 0),
-              };
+              const buff = option.data as any; // Use any to access potential new properties
+              const currentStats = state.stats;
+              const nextStats = { ...currentStats };
+
+              if (buff.damage) nextStats.tempDamageMult += buff.damage;
+              if (buff.attackSpeed) nextStats.tempAttackSpeedMult += buff.attackSpeed;
+              if (buff.heroDamage) nextStats.heroTempDamageMult = (nextStats.heroTempDamageMult || 0) + buff.heroDamage;
+              if (buff.heroAttackSpeed) nextStats.heroTempAttackSpeedMult = (nextStats.heroTempAttackSpeedMult || 0) + buff.heroAttackSpeed;
+
+              // New hero-specific stat buffs
+              if (buff.heroEnergyGainRate) nextStats.heroEnergyGainRate = (nextStats.heroEnergyGainRate || 1.0) + buff.heroEnergyGainRate;
+              if (buff.heroMaxEnergy) nextStats.heroMaxEnergy = Math.max(20, (nextStats.heroMaxEnergy || 100) + buff.heroMaxEnergy);
+
+              nextState.stats = nextStats;
+              
+              // Handle hero unit modification
+              if (buff.heroAttackType) {
+                  const units = [...state.gridUnits];
+                  const heroIndex = units.findIndex(u => u.isHero);
+                  if (heroIndex !== -1) {
+                      units[heroIndex] = { ...units[heroIndex], attackType: buff.heroAttackType };
+                      nextState.gridUnits = units;
+                  }
+              }
           }
           return nextState;
       });

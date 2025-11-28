@@ -16,10 +16,10 @@ export const INITIAL_STATS: PlayerStats = {
   gold: 10,
   heroLevel: 1,
   heroXp: 0,
-  heroMaxXp: 100,
+  heroMaxXp: 50, // Lower initial XP
   level: 1,
   xp: 0,
-  maxXp: 100,
+  maxXp: 50, // Lower initial XP
   
   damagePercent: 0,
   attackSpeed: 0,
@@ -40,6 +40,9 @@ export const INITIAL_STATS: PlayerStats = {
   heroTempDamageMult: 0,
   heroTempAttackSpeedMult: 0,
   wave: 1,
+  
+  heroEnergyGainRate: 1.0,
+  heroMaxEnergy: 100,
 };
 
 export const RARITY_COLORS: Record<string, string> = {
@@ -53,9 +56,9 @@ export const HERO_UNIT: Unit = {
   id: 'hero',
   name: 'Keyboard Warrior',
   emoji: '🦸‍♂️',
-  description: 'The commander. Gains energy over time to unleash a powerful ultimate attack.',
+  description: 'The commander. Gains energy over time to unleash a powerful ultimate attack. Its attack pattern can be upgraded.',
   type: 'MAGIC',
-  damage: 10,
+  damage: 25, // DPS equivalent to ~5 starting units
   range: 9999, 
   cooldown: 0,
   maxCooldown: 1.0,
@@ -65,7 +68,8 @@ export const HERO_UNIT: Unit = {
   energy: 0,
   row: 2,
   col: 0, 
-  isDead: false
+  isDead: false,
+  attackType: 'LINEAR',
 };
 
 // Temp Units for Draft
@@ -83,11 +87,11 @@ export const ENEMY_TYPES = [
 ];
 
 export const WAVE_CONFIG = [
-  { wave: 1, duration: 30, interval: 3.0, enemies: ['troll'] },
-  { wave: 2, duration: 35, interval: 2.5, enemies: ['troll', 'hater'] },
-  { wave: 3, duration: 40, interval: 2.0, enemies: ['troll', 'hater', 'bot'] },
-  { wave: 4, duration: 45, interval: 1.5, enemies: ['hater', 'bot'] },
-  { wave: 5, duration: 60, interval: 1.0, enemies: ['troll', 'hater', 'bot', 'boss'] },
+  { wave: 1, duration: 30, interval: 2.5, enemies: ['troll'] },
+  { wave: 2, duration: 35, interval: 2.0, enemies: ['troll', 'hater'] },
+  { wave: 3, duration: 40, interval: 1.8, enemies: ['troll', 'hater', 'bot'] },
+  { wave: 4, duration: 45, interval: 1.2, enemies: ['hater', 'bot'] },
+  { wave: 5, duration: 60, interval: 0.8, enemies: ['troll', 'hater', 'bot', 'boss'] },
 ];
 
 export const AMMO_TYPE_MAP: Record<string, string> = {

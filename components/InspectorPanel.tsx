@@ -1,9 +1,10 @@
 
 
 import React from 'react';
-import { InspectableEntity } from '../types';
-import { Sword, Wind, Target, Activity, Shield, Crosshair } from 'lucide-react';
+import { InspectableEntity, Unit } from '../types';
+import { Sword, Wind, Target, Activity } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
+import { CELL_SIZE } from '../constants';
 
 interface InspectorPanelProps {
   entity: InspectableEntity;
@@ -25,8 +26,6 @@ const StatRow = ({ icon: Icon, label, value, tooltip, color }: any) => (
 );
 
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
-  const { stats } = useGameStore();
-
   if (!entity) return null;
 
   const isUnit = entity.type === 'UNIT';
@@ -40,13 +39,17 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
   
   if (!isUnit) {
       finalDamage = data.damage;
-      finalCooldown = (data as any).attackTimer > 0 ? (data as any).attackTimer.toFixed(2) : statsBreakdown.cooldown.base.toFixed(2);
+      finalCooldown = statsBreakdown.cooldown.base.toFixed(2);
   }
 
   let dmgTooltip = `Base: ${statsBreakdown.damage.base}\nBonus: +${statsBreakdown.damage.bonus}\nMultiplier: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
   let cdTooltip = `Base: ${statsBreakdown.cooldown.base}s\nMultiplier: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
 
   const hpPct = Math.max(0, data.hp / data.maxHp) * 100;
+
+  const rangeInPixels = 'range' in data ? (data as Unit).range : 0;
+  const rangeInCells = Math.floor(rangeInPixels / CELL_SIZE);
+  const displayRange = rangeInPixels >= 2000 ? "Global" : `${rangeInCells} Grids`;
 
   return (
     <div className="absolute right-4 top-24 w-64 glass-panel rounded-xl p-4 border border-white/10 animate-in slide-in-from-right duration-300 pointer-events-auto">
@@ -107,9 +110,9 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
                  <StatRow 
                     icon={Target} 
                     label="Range" 
-                    value={(data as any).range} 
+                    value={displayRange}
                     color="text-cyan-400"
-                    tooltip="Max attack distance in pixels"
+                    tooltip={`Actual range: ${rangeInPixels} pixels`}
                  />
              )}
              {'speed' in data && (

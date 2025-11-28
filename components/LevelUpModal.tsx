@@ -1,8 +1,9 @@
 
 
 import React from 'react';
-import { TEMP_UNIT_POOL } from '../constants';
-import { PlayerStats, DraftOption, Unit } from '../types';
+import { TEMP_UNIT_POOL, WEAPON_POOL } from '../constants';
+// FIX: Import WeaponClass to use for type casting.
+import { PlayerStats, DraftOption, Unit, WeaponClass } from '../types';
 import { Sparkles, Sword, Zap } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -15,39 +16,60 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
   const [options, setOptions] = React.useState<DraftOption[]>([]);
 
   React.useEffect(() => {
-    const baseOptions: Omit<DraftOption, 'id'>[] = [
-        // Option 1: Temp Unit
-        (() => {
-            const template = TEMP_UNIT_POOL[Math.floor(Math.random() * TEMP_UNIT_POOL.length)];
-            return {
-                type: 'TEMP_UNIT',
-                name: `Merc: ${template.name}`,
-                emoji: template.emoji || '❓',
-                description: template.description || 'Deploys a powerful unit for ONE wave only.',
-                data: template
-            };
-        })(),
-        // Option 2: Hero Buff
-        {
-            type: 'TEMP_BUFF',
-            name: 'Hero Overdrive',
-            emoji: '🚀',
-            description: 'Hero attacks 100% faster for this wave.',
-            data: { heroAttackSpeed: 1.0 }
-        },
-        // Option 3: Global Buff
-        {
-            type: 'TEMP_BUFF',
-            name: 'Battle Cry',
-            emoji: '🗣️',
-            description: 'All units deal +20% damage for this wave.',
-            data: { damage: 0.2 }
-        }
+    // 1. Create a combined pool of units for draft
+    const allUnitOptions: Partial<Unit>[] = [
+      // Higher chance for dedicated temp units
+      ...TEMP_UNIT_POOL,
+      ...TEMP_UNIT_POOL,
+      // Add all buyable weapons as potential temp units
+      ...WEAPON_POOL.map(w => ({
+        name: w.name,
+        emoji: w.emoji,
+        // FIX: Cast weaponClass to WeaponClass to match the Unit type.
+        type: w.weaponClass as WeaponClass,
+        damage: w.damage,
+        maxCooldown: w.cooldown,
+        hp: 100,
+        maxHp: 100,
+        range: 1200, // A standard range for drafted units
+        description: `A temporary ${w.name} for this wave only.`
+      }))
     ];
 
-    // Shuffle and pick 3
-    const shuffled = baseOptions.sort(() => 0.5 - Math.random());
-    const newOptions = shuffled.slice(0, 3).map(opt => ({...opt, id: uuidv4() }));
+    const heroUpgrades: Omit<DraftOption, 'id'>[] = [
+        { type: 'TEMP_BUFF', name: 'Tri-Shot', emoji: '🔱', description: 'Hero fires 3 projectiles, covering adjacent rows.', data: { heroAttackType: 'TRI_SHOT' } },
+        { type: 'TEMP_BUFF', name: 'Penta-Shot', emoji: '🖐️', description: 'Hero fires 5 projectiles, covering all rows.', data: { heroAttackType: 'PENTA_SHOT' } },
+        { type: 'TEMP_BUFF', name: 'Seeking Shots', emoji: '🎯', description: 'Hero projectiles now track enemies.', data: { heroAttackType: 'TRACKING' } },
+        { type: 'TEMP_BUFF', name: 'Focused Energy', emoji: '🧘', description: 'Ultimate requires 20 less energy to cast.', data: { heroMaxEnergy: -20 } },
+        { type: 'TEMP_BUFF', name: 'Rapid Charge', emoji: '⚡️', description: 'Ultimate energy charges 50% faster.', data: { heroEnergyGainRate: 0.5 } },
+    ];
+    
+    // Existing base options
+    const baseBuffOptions: Omit<DraftOption, 'id'>[] = [
+        { type: 'TEMP_BUFF', name: 'Hero Overdrive', emoji: '🚀', description: 'Hero attacks 100% faster for this wave.', data: { heroAttackSpeed: 1.0 } },
+        { type: 'TEMP_BUFF', name: 'Battle Cry', emoji: '🗣️', description: 'All units deal +20% damage for this wave.', data: { damage: 0.2 } }
+    ];
+
+    const availableOptions: Omit<DraftOption, 'id'>[] = [];
+    
+    // Add a temp unit option
+    const unitTemplate = allUnitOptions[Math.floor(Math.random() * allUnitOptions.length)];
+    availableOptions.push({
+        type: 'TEMP_UNIT',
+        name: `Merc: ${unitTemplate.name}`,
+        emoji: unitTemplate.emoji || '❓',
+        description: unitTemplate.description || 'Deploys a powerful unit for ONE wave only.',
+        data: unitTemplate
+    });
+    
+    // Add two buff options from the combined pool of buffs
+    const allBuffs = [...heroUpgrades, ...baseBuffOptions];
+    // Shuffle and pick 2 unique buffs
+    const shuffledBuffs = allBuffs.sort(() => 0.5 - Math.random());
+    availableOptions.push(...shuffledBuffs.slice(0, 2));
+
+    const finalOptions = availableOptions.sort(() => 0.5 - Math.random());
+    const newOptions = finalOptions.map(opt => ({...opt, id: uuidv4() }));
 
     setOptions(newOptions);
   }, [level]);

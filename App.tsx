@@ -8,7 +8,7 @@ import { GameOverScreen } from './components/GameOverScreen';
 import { Shop } from './components/Shop';
 import { useGameStore } from './store/useGameStore';
 import { GamePhase, DraftOption, InspectableEntity } from './types';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG } from './constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG, INITIAL_STATS } from './constants';
 import { HUD } from './components/HUD';
 import { InspectorPanel } from './components/InspectorPanel';
 
@@ -45,7 +45,7 @@ export default function App() {
               if (newXp >= newMaxXp) {
                   newXp -= newMaxXp;
                   newLevel += 1;
-                  newMaxXp = Math.floor(newMaxXp * 1.5);
+                  newMaxXp = INITIAL_STATS.maxXp + (newLevel - 1) * 25; // Linear XP Scaling
                   didLevelUp = true;
               }
 

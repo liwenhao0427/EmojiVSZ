@@ -39,6 +39,7 @@ export class GameEngine {
   private visualUnits: Map<string, VisualUnit> = new Map();
   
   private waveTime: number = 30; // Default safe value
+  private waveDuration: number = 30;
   private spawnTimer: number = 0;
   
   // Input State
@@ -86,7 +87,8 @@ export class GameEngine {
     this.floatingTexts = [];
     this.unitCooldowns.clear();
     
-    this.waveTime = (duration && duration > 0) ? duration : 30; 
+    this.waveTime = (duration && duration > 0) ? duration : 30;
+    this.waveDuration = this.waveTime;
     this.spawnTimer = 2.0; 
     this.selectedEntityId = null;
     this.lastInspectedId = null;
@@ -313,7 +315,9 @@ export class GameEngine {
       if (this.waveTime > 0) {
           this.spawnTimer -= dt;
           if (this.spawnTimer <= 0) {
-              this.spawnTimer = config.interval;
+              // As time runs out, spawn rate increases
+              this.spawnTimer = Math.max(0.2, config.interval * (this.waveTime / this.waveDuration));
+
               const row = Math.floor(Math.random() * GRID_ROWS);
               const typeId = config.enemies[Math.floor(Math.random() * config.enemies.length)];
               const typeData = ENEMY_TYPES.find(e => e.id === typeId) || ENEMY_TYPES[0];
@@ -336,7 +340,9 @@ export class GameEngine {
                   isAttacking: false,
                   frozen: 0,
                   hitFlash: 0,
-                  name: typeId.toUpperCase()
+                  name: typeId.toUpperCase(),
+                  attackState: 'IDLE',
+                  attackProgress: 0,
               });
           }
       }
@@ -352,9 +358,10 @@ export class GameEngine {
 
           if (u.isHero) {
               store.updateHeroEnergy(5 * dt);
-              if (u.energy && u.energy >= 100) {
+              const maxEnergy = store.stats.heroMaxEnergy || 100;
+              if (u.energy && u.energy >= maxEnergy) {
                   this.triggerUltimate(u);
-                  store.updateHeroEnergy(-100); 
+                  store.updateHeroEnergy(-maxEnergy); 
               }
               heroDmgBuff += (store.stats.heroTempDamageMult || 0);
               heroAspdBuff += (store.stats.heroTempAttackSpeedMult || 0);
@@ -368,7 +375,11 @@ export class GameEngine {
 
           // Targeting logic
           let validEnemies = this.enemies.filter(e => e.row === u.row && e.x > (GRID_OFFSET_X + u.col * CELL_SIZE));
-          if (u.type === 'MAGIC' || u.range > 1500) validEnemies = this.enemies;
+          
+          const isTracking = (u.isHero && u.attackType === 'TRACKING') || (!u.isHero && u.type === 'MAGIC');
+          if (isTracking || u.range > 1500 || (u.isHero && (u.attackType === 'TRI_SHOT' || u.attackType === 'PENTA_SHOT'))) {
+              validEnemies = this.enemies;
+          }
 
           const unitX = GRID_OFFSET_X + (u.col * CELL_SIZE) + CELL_SIZE/2;
           const target = validEnemies.find(e => Math.abs(e.x - unitX) <= u.range);
@@ -396,19 +407,35 @@ export class GameEngine {
       const store = useGameStore.getState();
       const heroDmgBuff = u.isHero ? (1 + (store.stats.heroTempDamageMult || 0)) : 1;
       const damage = u.damage * (1 + store.stats.tempDamageMult + store.stats.damagePercent/100) * heroDmgBuff;
+      
+      // FIX: Explicitly set the type of projectileType to prevent it from being inferred as a generic 'string'.
+      // This ensures it matches the 'LINEAR' | 'TRACKING' | 'ARC' type required by the Projectile interface.
+      const projectileType: 'LINEAR' | 'TRACKING' = (u.isHero && u.attackType === 'TRACKING') || (!u.isHero && u.type === 'MAGIC') ? 'TRACKING' : 'LINEAR';
 
-      this.projectiles.push({
+      const createBaseProjectile = (startY: number) => ({
           id: Math.random(),
-          x, y,
+          x, y: startY,
           vx: 600, vy: 0,
           damage,
           emoji: u.type === 'MELEE' ? '🔪' : u.emoji,
           radius: 10,
           markedForDeletion: false,
-          type: u.type === 'MAGIC' ? 'TRACKING' : 'LINEAR',
-          targetId: target.id,
+          type: projectileType,
+          targetId: projectileType === 'TRACKING' ? target.id : undefined,
           originType: u.type,
       });
+
+      if (u.isHero && u.attackType === 'TRI_SHOT') {
+          this.projectiles.push(createBaseProjectile(y)); // Center
+          if (u.row > 0) this.projectiles.push(createBaseProjectile(y - CELL_SIZE));
+          if (u.row < GRID_ROWS - 1) this.projectiles.push(createBaseProjectile(y + CELL_SIZE));
+      } else if (u.isHero && u.attackType === 'PENTA_SHOT') {
+          for (let r = 0; r < GRID_ROWS; r++) {
+              this.projectiles.push(createBaseProjectile(GRID_OFFSET_Y + (r * CELL_SIZE) + CELL_SIZE/2));
+          }
+      } else {
+          this.projectiles.push(createBaseProjectile(y));
+      }
   }
 
   private updateEnemies(dt: number) {
@@ -420,6 +447,15 @@ export class GameEngine {
           if (e.frozen > 0) {
               e.frozen -= dt;
               return;
+          }
+          
+          // Animate attack if in progress
+          if(e.attackState === 'ATTACKING') {
+              e.attackProgress! += dt * 3.0; // Animation lasts ~0.33s
+              if(e.attackProgress! >= 1) {
+                  e.attackState = 'IDLE';
+                  e.attackProgress = 0;
+              }
           }
 
           // 1. Move
@@ -445,8 +481,10 @@ export class GameEngine {
                   store.damageUnit(unitInCell.id, e.damage);
                   const vis = this.visualUnits.get(unitInCell.id);
                   if (vis) vis.hitFlash = 0.2;
-                  this.addText(e.x - 20, e.y, "CRUNCH", 'red');
+                  
                   e.attackTimer = 1.0;
+                  e.attackState = 'ATTACKING';
+                  e.attackProgress = 0;
               }
               // Stop moving if engaging unit
               e.x += e.speed * dt; 
@@ -625,7 +663,8 @@ export class GameEngine {
         this.ctx.fillRect(barX, barY, barWidth * hpPct, barHeight);
 
         if (u.isHero) {
-            const ep = (u.energy || 0) / 100;
+            const maxEnergy = useGameStore.getState().stats.heroMaxEnergy || 100;
+            const ep = (u.energy || 0) / maxEnergy;
             this.ctx.fillStyle = 'blue';
             this.ctx.fillRect(barX, barY + 80, barWidth, 4);
             this.ctx.fillStyle = 'cyan';
@@ -637,8 +676,17 @@ export class GameEngine {
 
   private drawEnemies() {
       this.enemies.forEach(e => {
+        let drawX = e.x;
+        // Lunge animation
+        if (e.attackState === 'ATTACKING' && e.attackProgress) {
+            const lungeDistance = 40;
+            // sin wave for out-and-back motion
+            const offset = Math.sin(e.attackProgress * Math.PI) * -lungeDistance;
+            drawX += offset;
+        }
+          
         this.ctx.save();
-        this.ctx.translate(e.x, e.y);
+        this.ctx.translate(drawX, e.y);
         this.ctx.font = '50px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
