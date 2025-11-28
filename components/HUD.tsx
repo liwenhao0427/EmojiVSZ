@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { PlayerStats } from '../types';
-import { Heart, Zap, Shield, Swords, Crosshair, Wind, Clover, ChevronLeft, Menu, Magnet, GraduationCap } from 'lucide-react';
+import { Zap, Shield, Swords, Crosshair, Wind, Clover, Menu, Magnet, GraduationCap, Coins } from 'lucide-react';
 
 interface HUDProps {
   stats: PlayerStats;
@@ -18,7 +18,6 @@ const StatRow = ({ icon: Icon, label, value, color }: any) => (
 );
 
 export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
-  const hpPct = (stats.hp / stats.maxHp) * 100;
   const xpPct = (stats.xp / stats.maxXp) * 100;
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -27,22 +26,22 @@ export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
         
         {/* Top Bar */}
         <div className="flex justify-between items-start pointer-events-auto">
-            {/* Left: Health & XP */}
-            <div className="glass-panel p-3 rounded-lg w-80">
-                <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-bold text-red-400 flex items-center gap-1"><Heart size={12}/> HP</span>
-                    <span className="text-xs text-gray-400 font-mono">{Math.ceil(stats.hp)}/{Math.ceil(stats.maxHp)}</span>
-                </div>
-                <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden mb-3 border border-slate-700">
-                    <div className="h-full bg-red-500 transition-all duration-300" style={{ width: `${Math.max(0, hpPct)}%` }}></div>
-                </div>
+            {/* Left: Gold & XP */}
+            <div className="flex flex-col gap-2">
+                 <div className="glass-panel px-4 py-2 rounded-lg flex items-center gap-3 border border-yellow-500/30">
+                    <Coins className="text-yellow-400" size={20} />
+                    <span className="text-2xl font-mono font-bold text-yellow-300 tracking-wider">{stats.gold}</span>
+                 </div>
 
-                <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-bold text-yellow-400 flex items-center gap-1"><Zap size={12}/> LVL {stats.level}</span>
-                    <span className="text-xs text-gray-400 font-mono">{Math.floor(stats.xp)}/{Math.floor(stats.maxXp)}</span>
-                </div>
-                <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-                    <div className="h-full bg-yellow-500 transition-all duration-300" style={{ width: `${Math.max(0, xpPct)}%` }}></div>
+                 <div className="glass-panel p-3 rounded-lg w-64">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-bold text-cyan-400 flex items-center gap-1"><Zap size={12}/> LVL {stats.level}</span>
+                        <span className="text-xs text-gray-400 font-mono">{Math.floor(stats.xp)}/{Math.floor(stats.maxXp)}</span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                        <div className="h-full bg-cyan-500 transition-all duration-300" style={{ width: `${Math.max(0, xpPct)}%` }}></div>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-1 text-center uppercase tracking-widest">XP needed for Reinforcements</div>
                 </div>
             </div>
 
@@ -75,10 +74,8 @@ export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
                      <StatRow icon={Swords} label="Damage" value={`+${stats.damagePercent}%`} color="text-red-400" />
                      <StatRow icon={Wind} label="Atk Spd" value={`+${stats.attackSpeed}%`} color="text-yellow-400" />
                      <StatRow icon={Crosshair} label="Crit" value={`${(stats.critChance*100).toFixed(0)}%`} color="text-orange-400" />
-                     <StatRow icon={Shield} label="Armor" value={stats.armor} color="text-blue-400" />
                      <StatRow icon={Wind} label="Speed" value={`${stats.speed}%`} color="text-cyan-400" />
                      <StatRow icon={Clover} label="Luck" value={stats.luck} color="text-green-400" />
-                     <StatRow icon={Heart} label="Regen" value={`${stats.hpRegen}/5s`} color="text-pink-400" />
                      <StatRow icon={Magnet} label="Pickup" value={`+${(stats.pickupRange*100).toFixed(0)}%`} color="text-indigo-400" />
                      <StatRow icon={GraduationCap} label="XP Gain" value={`+${(stats.xpGain*100).toFixed(0)}%`} color="text-purple-400" />
                 </div>

@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/GameEngine';
 import { StartScreen } from './components/StartScreen';
@@ -6,12 +7,12 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { GameOverScreen } from './components/GameOverScreen';
 import { Shop } from './components/Shop';
 import { useGameStore } from './store/useGameStore';
-import { GamePhase } from './types';
+import { GamePhase, DraftOption } from './types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG } from './constants';
 import { HUD } from './components/HUD';
 
 export default function App() {
-  const { phase, setPhase, initGame, stats, startNextWave } = useGameStore();
+  const { phase, setPhase, initGame, stats, startNextWave, applyDraft } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -30,7 +31,6 @@ export default function App() {
         {
           onTimeUpdate: (t) => setTimeLeft(t),
           onGainLoot: (xp, gold) => {
-              // 1. Update State
               const store = useGameStore.getState();
               
               let newXp = store.stats.xp + xp;
@@ -42,7 +42,7 @@ export default function App() {
               if (newXp >= newMaxXp) {
                   newXp -= newMaxXp;
                   newLevel += 1;
-                  newMaxXp = Math.floor(newMaxXp * 1.2);
+                  newMaxXp = Math.floor(newMaxXp * 1.5);
                   didLevelUp = true;
               }
 
@@ -56,25 +56,26 @@ export default function App() {
                   } 
               }));
 
-              // 2. Trigger Level Up UI if needed
               if (didLevelUp) {
                   engineRef.current?.stop();
                   setShowLevelUp(true);
               }
           },
           onDamagePlayer: (amount) => {
-               // Logic handled in store damageUnit usually, but can trigger sound/shake here
+               // Visual shake only
           },
           onWaveEnd: () => {
-              // Strict Wave End Transition -> Shop
               setPhase(GamePhase.SHOP);
+          },
+          onGameOver: () => {
+              engineRef.current?.stop();
+              setPhase(GamePhase.GAME_OVER);
           }
         }
       );
     }
     
-    // We keep the engine running during SHOP so grid rendering works
-    // Pause during LEVEL UP (handled by manual start/stop in logic above) or START
+    // Engine Control
     if (phase === GamePhase.COMBAT || phase === GamePhase.SHOP) {
       if (!showLevelUp) {
         engineRef.current?.start();
@@ -83,7 +84,7 @@ export default function App() {
       engineRef.current?.stop();
     }
     
-    // Explicitly start the wave timer and logic when entering COMBAT
+    // Wave Start
     if (phase === GamePhase.COMBAT && !showLevelUp) {
         const config = WAVE_CONFIG.find(w => w.wave === stats.wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
         engineRef.current?.startWave(config.duration, stats.wave);
@@ -99,19 +100,8 @@ export default function App() {
     startNextWave();
   };
 
-  const handleLevelUpSelect = (upgrade: any) => {
-      // Apply Upgrade Logic
-      const store = useGameStore.getState();
-      
-      if (upgrade.type === 'STAT') {
-          // Simplistic Stat Application
-          if (upgrade.label === "Max HP Up") {
-             useGameStore.setState(s => ({ stats: { ...s.stats, maxHp: s.stats.maxHp + upgrade.value, hp: s.stats.hp + upgrade.value } }));
-          } else if (upgrade.label === "Damage Up") {
-             useGameStore.setState(s => ({ stats: { ...s.stats, damagePercent: s.stats.damagePercent + upgrade.value } }));
-          }
-      }
-
+  const handleDraftSelect = (option: DraftOption) => {
+      applyDraft(option);
       setShowLevelUp(false);
       engineRef.current?.start(); // Resume
   };
@@ -151,7 +141,7 @@ export default function App() {
         {showLevelUp && (
             <LevelUpModal 
                 level={stats.level} 
-                onSelect={handleLevelUpSelect} 
+                onSelect={handleDraftSelect} 
             />
         )}
         
@@ -160,8 +150,16 @@ export default function App() {
                 stats={stats} 
                 currentWave={stats.wave}
                 onNextWave={startNextWave}
-                onBuyWeapon={(w) => { /* Add logic */ }}
-                onBuyItem={(i) => { /* Add logic */ }}
+                onBuyWeapon={() => {}} // Deprecated by addUnit inside Shop
+                onBuyItem={(item) => {
+                     // Apply permanent item stats
+                     const store = useGameStore.getState();
+                     const newStats = { ...store.stats };
+                     Object.entries(item.stats).forEach(([k, v]) => {
+                         (newStats as any)[k] += v;
+                     });
+                     useGameStore.setState({ stats: newStats });
+                }}
                 updateGold={(amount) => { useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold + amount } })) }}
             />
         )}

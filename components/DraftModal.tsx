@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { Shield, Sword, Zap } from 'lucide-react';
@@ -35,8 +36,8 @@ export const DraftModal = () => {
             <div className="text-6xl mb-6">{option.emoji}</div>
             
             <div className="flex items-center gap-2 mb-2">
-              <span className={`px-2 py-1 rounded text-xs font-bold ${option.type === 'MERCENARY' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}`}>
-                {option.type}
+              <span className={`px-2 py-1 rounded text-xs font-bold ${option.type === 'TEMP_UNIT' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'}`}>
+                {option.type === 'TEMP_UNIT' ? 'MERCENARY' : 'HERO BUFF'}
               </span>
             </div>
 

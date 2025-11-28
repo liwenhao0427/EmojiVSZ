@@ -16,7 +16,7 @@ export interface Unit {
   cooldown: number; // Seconds
   maxCooldown: number;
   
-  // Survival Stats
+  // Survival Stats (For the Unit itself, not the player)
   hp: number;
   maxHp: number;
   
@@ -35,8 +35,10 @@ export interface Unit {
 }
 
 export interface PlayerStats {
-  // Hero / Global Progression
+  // Resources
   gold: number;
+  
+  // Progression
   heroLevel: number;
   heroXp: number;
   heroMaxXp: number;
@@ -46,16 +48,12 @@ export interface PlayerStats {
   xp: number;
   maxXp: number;
   
-  // Combat Stats (HUD & Calculations)
-  hp: number;
-  maxHp: number;
+  // Combat Stats (Global Buffs)
   damagePercent: number;
   attackSpeed: number;
   critChance: number;
-  armor: number;
-  speed: number;
+  speed: number; // Projectile speed modifier
   luck: number;
-  hpRegen: number;
   pickupRange: number;
   xpGain: number;
   shopDiscount: number;
@@ -85,11 +83,12 @@ export enum GamePhase {
 
 export interface DraftOption {
   id: string;
-  type: 'MERCENARY' | 'BUFF';
+  type: 'TEMP_UNIT' | 'TEMP_BUFF';
   description: string;
-  data: Partial<Unit> | { damage?: number, speed?: number };
+  data: Partial<Unit> | { damage?: number, attackSpeed?: number };
   emoji: string;
   name: string;
+  value?: number; // For UI display
 }
 
 // --- Engine Entity Types ---
@@ -109,11 +108,11 @@ export interface Enemy extends Entity {
   emoji: string;
   type: 'NORMAL' | 'ELITE' | 'BOSS';
   damage: number;
-  row: number; // Enemies are locked to a row usually, or move freely
-  attackTimer: number; // Time until next attack
-  isAttacking: boolean; // Visual state
-  frozen: number; // Time remaining frozen
-  hitFlash?: number; // Visual flash timer
+  row: number; 
+  attackTimer: number; 
+  isAttacking: boolean; 
+  frozen: number; 
+  hitFlash?: number; 
 }
 
 export interface Projectile extends Entity {
@@ -122,7 +121,7 @@ export interface Projectile extends Entity {
   damage: number;
   emoji: string;
   type: 'LINEAR' | 'ARC' | 'TRACKING';
-  targetId?: number; // For tracking
+  targetId?: number; 
 }
 
 export interface FloatingText {
@@ -149,8 +148,8 @@ export interface AmmoItem {
   duration?: number;
   weaponClass: WeaponClass;
   type: string;
-  bought?: boolean; // For shop
-  locked?: boolean; // For shop
+  bought?: boolean; 
+  locked?: boolean; 
 }
 
 export type AmmoBayState = Record<string, AmmoItem[]>;

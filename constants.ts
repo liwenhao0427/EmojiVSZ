@@ -1,18 +1,19 @@
 
+
 import { PlayerStats, Unit } from './types';
 
 export const CANVAS_WIDTH = 1200; 
-export const CANVAS_HEIGHT = 800; // Reduced height for better landscape aspect
+export const CANVAS_HEIGHT = 800; 
 
 export const GRID_ROWS = 5;
 export const GRID_COLS = 9;
-export const CELL_SIZE = 120; // Size of each grid cell
-export const GRID_OFFSET_X = 60; // Left margin
-export const GRID_OFFSET_Y = 100; // Top margin
+export const CELL_SIZE = 120; 
+export const GRID_OFFSET_X = 60; 
+export const GRID_OFFSET_Y = 100; 
 export const GRID_TOP_OFFSET = 100;
 
 export const INITIAL_STATS: PlayerStats = {
-  gold: 0,
+  gold: 10,
   heroLevel: 1,
   heroXp: 0,
   heroMaxXp: 100,
@@ -20,15 +21,11 @@ export const INITIAL_STATS: PlayerStats = {
   xp: 0,
   maxXp: 100,
   
-  hp: 100,
-  maxHp: 100,
   damagePercent: 0,
   attackSpeed: 0,
   critChance: 0.05,
-  armor: 0,
   speed: 100,
   luck: 0,
-  hpRegen: 0,
   pickupRange: 1.0,
   xpGain: 1.0,
   shopDiscount: 0,
@@ -56,26 +53,23 @@ export const HERO_UNIT: Unit = {
   emoji: '🦸‍♂️',
   type: 'MAGIC',
   damage: 10,
-  range: 9999, // Infinite
+  range: 9999, 
   cooldown: 0,
   maxCooldown: 1.0,
-  hp: 100,
-  maxHp: 100,
+  hp: 200,
+  maxHp: 200,
   isHero: true,
   energy: 0,
   row: 2,
-  col: 0, // Starts at back middle
+  col: 0, 
   isDead: false
 };
 
-// Available Mercenaries for Draft
-export const MERCENARY_POOL: Partial<Unit>[] = [
-  { name: "Boxer", emoji: '🥊', type: 'MELEE', damage: 20, maxCooldown: 1.5, hp: 150, range: 150, maxHp: 150 },
-  { name: "Gunner", emoji: '🔫', type: 'RANGED', damage: 8, maxCooldown: 0.8, hp: 60, range: 900, maxHp: 60 },
-  { name: "Wizard", emoji: '🧙‍♂️', type: 'MAGIC', damage: 15, maxCooldown: 2.0, hp: 50, range: 600, maxHp: 50 },
-  { name: "Wall-Nut", emoji: '🌰', type: 'ENGINEERING', damage: 0, maxCooldown: 999, hp: 400, range: 0, maxHp: 400 },
-  { name: "Sniper", emoji: '🏹', type: 'RANGED', damage: 40, maxCooldown: 3.5, hp: 40, range: 1200, maxHp: 40 },
-  { name: "Ninja", emoji: '🥷', type: 'MELEE', damage: 10, maxCooldown: 0.2, hp: 80, range: 150, maxHp: 80 },
+// Temp Units for Draft
+export const TEMP_UNIT_POOL: Partial<Unit>[] = [
+  { name: "Cannon", emoji: '💣', type: 'ENGINEERING', damage: 50, maxCooldown: 2.5, hp: 100, range: 1200, maxHp: 100 },
+  { name: "Sniper Bot", emoji: '🔭', type: 'RANGED', damage: 100, maxCooldown: 4.0, hp: 50, range: 2000, maxHp: 50 },
+  { name: "Berzerker", emoji: '👺', type: 'MELEE', damage: 40, maxCooldown: 0.5, hp: 200, range: 150, maxHp: 200 },
 ];
 
 export const ENEMY_TYPES = [
@@ -111,14 +105,13 @@ export const KEYWORD_DEFINITIONS: Record<string, string> = {
 export const WEAPON_POOL = [
   { name: "Pistol", emoji: '🔫', rarity: 'COMMON', type: 'BULLET', damage: 10, cooldown: 1.0, speed: 20, weaponClass: 'RANGED' },
   { name: "Wand", emoji: '🪄', rarity: 'RARE', type: 'MAGIC', damage: 15, cooldown: 1.5, speed: 15, weaponClass: 'MAGIC' },
+  { name: "Sword", emoji: '⚔️', rarity: 'COMMON', type: 'MELEE', damage: 20, cooldown: 0.8, speed: 0, weaponClass: 'MELEE' },
+  { name: "Turret", emoji: '📡', rarity: 'EPIC', type: 'ENGINEERING', damage: 8, cooldown: 0.3, speed: 30, weaponClass: 'ENGINEERING' },
 ];
 
 export const ITEM_POOL = [
-  { name: "Bandage", rarity: 'COMMON', description: "+10 HP", stats: { maxHp: 10 } },
   { name: "Scope", rarity: 'RARE', description: "+10% Range", stats: { pickupRange: 0.1 } },
-];
-
-export const AVAILABLE_UPGRADES = [
-  { label: "Max HP Up", detail: "+20 Max HP", type: 'STAT', value: 20 },
-  { label: "Damage Up", detail: "+10% Damage", type: 'STAT', value: 10 },
+  { name: "Coffee", rarity: 'COMMON', description: "+10% Atk Speed", stats: { attackSpeed: 10 } },
+  { name: "Dumbbell", rarity: 'COMMON', description: "+5% Damage", stats: { damagePercent: 5 } },
+  { name: "Lucky Charm", rarity: 'EPIC', description: "+20 Luck", stats: { luck: 20 } },
 ];

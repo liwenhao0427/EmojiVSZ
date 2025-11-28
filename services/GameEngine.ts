@@ -1,14 +1,16 @@
 
+
 import { Unit, Enemy, Projectile, FloatingText, GamePhase, PlayerStats, AmmoBayState } from '../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG, ENEMY_TYPES } from '../constants';
 import { useGameStore } from '../store/useGameStore';
 
 interface EngineCallbacks {
-    onDamagePlayer?: (amount: number) => void;
+    onDamagePlayer?: (amount: number) => void; // Kept for visual shake
     onGainLoot?: (xp: number, gold: number) => void;
     onWaveEnd?: () => void;
     onLootGoblinKill?: () => void;
     onTimeUpdate?: (timeLeft: number) => void;
+    onGameOver?: () => void;
 }
 
 // Internal visual state for smoothing animations
@@ -40,6 +42,7 @@ export class GameEngine {
   
   // Input State
   private dragUnitId: string | null = null;
+  private dragStartGrid: { r: number, c: number } | null = null;
   private mouseX: number = 0;
   private mouseY: number = 0;
   private unitCooldowns: Map<string, number> = new Map();
@@ -78,7 +81,6 @@ export class GameEngine {
     this.floatingTexts = [];
     this.unitCooldowns.clear();
     
-    // CRITICAL FIX: Fallback for duration to prevent instant skip
     this.waveTime = (duration && duration > 0) ? duration : 30; 
     this.spawnTimer = 2.0; 
     
@@ -95,7 +97,7 @@ export class GameEngine {
   public updateStats(stats: PlayerStats) { /* Sync if needed */ }
 
   public updateMouse(x: number, y: number) {
-      // Handled by internal listeners, but kept for interface compatibility
+      // Handled by internal listeners
   }
 
   public resize(width: number, height: number) {
@@ -114,11 +116,8 @@ export class GameEngine {
   private loop = (timestamp: number) => {
     if (!this.isRunning) return;
     
-    // Calculate Delta Time
     const dtRaw = (timestamp - this.lastTime) / 1000;
     this.lastTime = timestamp;
-    
-    // Clamp dt to max 0.1s to prevent huge jumps
     const dt = Math.min(dtRaw, 0.1);
 
     this.update(dt, timestamp);
@@ -135,33 +134,20 @@ export class GameEngine {
 
     if (store.phase !== GamePhase.COMBAT) return;
 
-    // 2. Logic Updates - Timer Countdown
+    // 2. Logic Updates
     this.waveTime -= dt;
 
-    // --- FIX: Strict Wave End Logic ---
     if (this.waveTime <= 0) {
         this.waveTime = 0;
-        
-        // 1. Force Clear Entities
         this.enemies = [];
         this.projectiles = [];
         this.floatingTexts = [];
-
-        // 2. Reset Units (Heal, Reset Energy)
-        const resetUnits = store.gridUnits.map(u => ({
-            ...u,
-            hp: u.maxHp,       // Full Heal
-            energy: 0,         // Reset Energy
-            isDead: false,     // Revive
-            hitFlash: 0
-        }));
         
-        // Update store directly to reflect reset state immediately
-        useGameStore.setState({ gridUnits: resetUnits });
+        // Let Store handle logic reset (temp units, energy)
+        store.resetWaveState();
 
-        // 3. Trigger Wave End (App will handle Phase Switch to SHOP)
         this.callbacks?.onWaveEnd?.();
-        return; // Stop update for this frame
+        return; 
     }
 
     this.spawnEnemies(dt, store.stats.wave);
@@ -170,17 +156,9 @@ export class GameEngine {
     this.updateProjectiles(dt);
     this.updateFloatingText(dt); 
 
-    // Throttled Timer Update
     if (timestamp - this.lastTimerUpdate > 1000) {
         this.callbacks?.onTimeUpdate?.(Math.ceil(Math.max(0, this.waveTime)));
         this.lastTimerUpdate = timestamp;
-    }
-
-    // End Conditions - Game Over
-    if (this.enemies.some(e => e.x < 0)) {
-        store.setPhase(GamePhase.GAME_OVER);
-        this.stop();
-        return;
     }
   }
 
@@ -202,17 +180,17 @@ export class GameEngine {
           }
 
           const vis = this.visualUnits.get(u.id)!;
-          
-          // Flash Decay
           if (vis.hitFlash > 0) vis.hitFlash -= dt;
 
           const isDragging = this.dragUnitId === u.id;
 
           if (isDragging) {
+              // Strictly follow mouse when dragging
               vis.x = this.mouseX;
               vis.y = this.mouseY;
               vis.scale = vis.scale + (1.15 - vis.scale) * LERP_FACTOR;
           } else {
+              // Fly to grid position
               const targetX = GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE/2;
               const targetY = GRID_OFFSET_Y + u.row * CELL_SIZE + CELL_SIZE/2;
               vis.x += (targetX - vis.x) * LERP_FACTOR;
@@ -221,6 +199,7 @@ export class GameEngine {
           }
       });
 
+      // Cleanup
       for (const id of this.visualUnits.keys()) {
           if (!seenIds.has(id)) {
               this.visualUnits.delete(id);
@@ -232,7 +211,6 @@ export class GameEngine {
       const config = WAVE_CONFIG.find(w => w.wave === wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
       if (!config) return;
 
-      // Spawn as long as time remains
       if (this.waveTime > 0) {
           this.spawnTimer -= dt;
           if (this.spawnTimer <= 0) {
@@ -282,6 +260,7 @@ export class GameEngine {
               return;
           }
 
+          // Targeting logic
           let validEnemies = this.enemies.filter(e => e.row === u.row && e.x > (GRID_OFFSET_X + u.col * CELL_SIZE));
           if (u.type === 'MAGIC' || u.range > 1500) validEnemies = this.enemies;
 
@@ -290,7 +269,7 @@ export class GameEngine {
 
           if (target) {
               this.fireProjectile(u, unitX, GRID_OFFSET_Y + (u.row * CELL_SIZE) + CELL_SIZE/2, target);
-              const buff = 1 + store.stats.tempAttackSpeedMult;
+              const buff = 1 + store.stats.tempAttackSpeedMult + (store.stats.attackSpeed / 100);
               this.unitCooldowns.set(u.id, u.maxCooldown / buff);
           }
       });
@@ -309,12 +288,12 @@ export class GameEngine {
 
   private fireProjectile(u: Unit, x: number, y: number, target: Enemy) {
       const store = useGameStore.getState();
-      const damage = u.damage * (1 + store.stats.tempDamageMult);
+      const damage = u.damage * (1 + store.stats.tempDamageMult + store.stats.damagePercent/100);
 
       if (u.type === 'MELEE') {
           target.hp -= damage;
-          target.x += 30; // Knockback
-          target.hitFlash = 0.2; // Visual flash
+          target.x += 40; // Significant Knockback
+          target.hitFlash = 0.2; 
           this.addText(target.x, target.y, `-${Math.round(damage)}`, 'white');
           if (target.hp <= 0) this.killEnemy(target);
           return;
@@ -344,6 +323,17 @@ export class GameEngine {
               return;
           }
 
+          // 1. Move
+          e.x -= e.speed * dt;
+
+          // 2. Instant Game Over Check
+          if (e.x < GRID_OFFSET_X) {
+             this.callbacks?.onGameOver?.();
+             store.setPhase(GamePhase.GAME_OVER);
+             return; 
+          }
+
+          // 3. Combat with Units
           const unitInCell = store.gridUnits.find(u => 
               !u.isDead && u.row === e.row && 
               Math.abs(e.x - (GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE/2)) < (CELL_SIZE/2 + e.radius)
@@ -352,16 +342,16 @@ export class GameEngine {
           if (unitInCell) {
               e.attackTimer -= dt;
               if (e.attackTimer <= 0) {
+                  // Enemies damage Units (Units have HP)
                   store.damageUnit(unitInCell.id, e.damage);
                   const vis = this.visualUnits.get(unitInCell.id);
                   if (vis) vis.hitFlash = 0.2;
                   this.addText(e.x - 20, e.y, "CRUNCH", 'red');
                   e.attackTimer = 1.0;
-                  this.callbacks?.onDamagePlayer?.(e.damage);
               }
-          } else {
-              e.x -= e.speed * dt;
-          }
+              // Stop moving if engaging unit
+              e.x += e.speed * dt; 
+          } 
       });
       this.enemies = this.enemies.filter(e => !e.markedForDeletion);
   }
@@ -393,22 +383,18 @@ export class GameEngine {
       this.projectiles = this.projectiles.filter(p => !p.markedForDeletion);
   }
 
-  // --- FIX: Instant Loot & Simplified Kill Logic ---
   private killEnemy(e: Enemy) {
       if (e.markedForDeletion) return;
       e.markedForDeletion = true;
       
-      // Calculate Rewards based on enemy type
       const isBoss = e.type === 'BOSS';
       const isElite = e.type === 'ELITE';
       
       const xp = isBoss ? 50 : isElite ? 20 : 10;
       const gold = isBoss ? 20 : isElite ? 10 : 5;
 
-      // 1. Instant Logic Callback
       this.callbacks?.onGainLoot?.(xp, gold);
 
-      // 2. Visual Feedback Only (No physics bodies)
       this.addText(e.x, e.y - 20, `+${xp} XP`, 'cyan');
       this.addText(e.x, e.y - 50, `+${gold} G`, 'yellow');
   }
@@ -453,15 +439,30 @@ export class GameEngine {
             const x = GRID_OFFSET_X + c * CELL_SIZE;
             const y = GRID_OFFSET_Y + r * CELL_SIZE;
             
-            this.ctx.fillStyle = (r+c)%2===0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)';
-            this.ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
-            this.ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            // Highlight drop target if dragging
+            if (this.dragUnitId) {
+                const dragC = Math.floor((this.mouseX - GRID_OFFSET_X) / CELL_SIZE);
+                const dragR = Math.floor((this.mouseY - GRID_OFFSET_Y) / CELL_SIZE);
+                if (dragC === c && dragR === r) {
+                    this.ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+                    this.ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                }
+            }
+
+            this.ctx.strokeStyle = 'rgba(255,255,255,0.05)';
             this.ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
         }
     }
+    
+    // Danger Zone Line
+    this.ctx.strokeStyle = 'red';
+    this.ctx.lineWidth = 2;
+    this.ctx.beginPath();
+    this.ctx.moveTo(GRID_OFFSET_X, 0);
+    this.ctx.lineTo(GRID_OFFSET_X, CANVAS_HEIGHT);
+    this.ctx.stroke();
   }
 
-  // --- FIX: Visual Safety for Units ---
   private drawUnit(u: Unit) {
       const vis = this.visualUnits.get(u.id);
       if (!vis) return;
@@ -484,28 +485,25 @@ export class GameEngine {
 
       if (u.isDead) {
         this.ctx.globalAlpha = 0.5; 
-        this.ctx.fillStyle = 'white'; // Explicit color
         this.ctx.fillText('🪦', 0, 0);
-        this.ctx.globalAlpha = 1.0; 
       } else {
-        // 1. BASE DRAW (Always Opaque & Clean Composite)
+        if (u.isTemp) {
+             this.ctx.shadowColor = 'cyan';
+             this.ctx.shadowBlur = 10;
+        }
+
         this.ctx.globalAlpha = 1.0;
-        this.ctx.globalCompositeOperation = 'source-over'; 
         this.ctx.fillStyle = 'white'; 
         this.ctx.fillText(u.emoji, 0, 0);
 
-        // 2. HIT FLASH OVERLAY
         if (vis.hitFlash > 0) {
-            this.ctx.save();
             this.ctx.globalCompositeOperation = 'source-atop';
             this.ctx.fillStyle = `rgba(255, 255, 255, 0.7)`;
             this.ctx.fillText(u.emoji, 0, 0);
-            this.ctx.restore();
-            // Reset composite state
             this.ctx.globalCompositeOperation = 'source-over';
         }
 
-        // 3. UI / BARS
+        // Unit HP Bar
         const barWidth = 60;
         const barHeight = 6;
         const hpPct = u.hp / u.maxHp;
@@ -538,32 +536,16 @@ export class GameEngine {
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         
-        if (e.frozen > 0) {
-            this.ctx.shadowColor = 'cyan';
-            this.ctx.shadowBlur = 10;
-        } else {
-            this.ctx.shadowBlur = 0;
-        }
-        
-        // 1. BASE DRAW
-        this.ctx.globalAlpha = 1.0;
-        this.ctx.globalCompositeOperation = 'source-over'; 
         this.ctx.fillStyle = 'white';
         this.ctx.fillText(e.emoji, 0, 0);
 
-        // 2. HIT FLASH OVERLAY
         if (e.hitFlash && e.hitFlash > 0) {
-            this.ctx.save();
             this.ctx.globalCompositeOperation = 'source-atop';
             this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
             this.ctx.fillText(e.emoji, 0, 0);
-            this.ctx.restore();
             this.ctx.globalCompositeOperation = 'source-over';
         }
         
-        this.ctx.shadowBlur = 0;
-        
-        // 3. HP Bar
         const barWidth = 50;
         const barHeight = 5;
         const hpPct = Math.max(0, e.hp / e.maxHp);
@@ -572,7 +554,6 @@ export class GameEngine {
 
         this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
         this.ctx.fillRect(barX, barY, barWidth, barHeight);
-        
         this.ctx.fillStyle = 'red';
         this.ctx.fillRect(barX, barY, barWidth * hpPct, barHeight);
 
@@ -583,13 +564,7 @@ export class GameEngine {
   private drawProjectiles() {
       this.projectiles.forEach(p => {
         this.ctx.save();
-        
-        // 1. Force Reset State
         this.ctx.globalAlpha = 1.0;
-        this.ctx.globalCompositeOperation = 'source-over';
-        this.ctx.fillStyle = 'white'; 
-        
-        // 2. Position & Rotation
         this.ctx.translate(p.x, p.y);
         
         if (p.vx !== 0 || p.vy !== 0) {
@@ -597,12 +572,10 @@ export class GameEngine {
             this.ctx.rotate(angle);
         }
 
-        // 3. Draw Small Emoji
         this.ctx.font = '24px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(p.emoji, 0, 0);
-        
         this.ctx.restore();
       });
   }
@@ -616,7 +589,7 @@ export class GameEngine {
       });
   }
 
-  // --- Input Handlers ---
+  // --- Input Handlers (Modified for Strict Swap) ---
   private handleMouseDown = (e: MouseEvent) => {
       this.updateMouseCoords(e);
       const { c, r } = this.getGridPos(e);
@@ -626,6 +599,7 @@ export class GameEngine {
           const unit = store.gridUnits.find(u => u.row === r && u.col === c);
           if (unit) {
               this.dragUnitId = unit.id;
+              this.dragStartGrid = { r, c };
               const vis = this.visualUnits.get(unit.id);
               if (vis) {
                   vis.scale = 1.15;
@@ -636,26 +610,29 @@ export class GameEngine {
 
   private handleMouseMove = (e: MouseEvent) => {
       this.updateMouseCoords(e);
-      
       if (this.dragUnitId) {
           this.canvas.style.cursor = 'grabbing';
-          const { c, r } = this.getGridPos(e);
-
-          if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
-              const store = useGameStore.getState();
-              const unit = store.gridUnits.find(u => u.id === this.dragUnitId);
-              
-              if (unit && (unit.row !== r || unit.col !== c)) {
-                  store.moveUnit(this.dragUnitId, r, c);
-              }
-          }
+          // NOTE: We do NOT update store.moveUnit here anymore. 
+          // We only update mouse coords which update visual position in updateGridVisuals
       } else {
           this.canvas.style.cursor = 'default';
       }
   };
 
   private handleMouseUp = (e: MouseEvent) => {
+      if (this.dragUnitId && this.dragStartGrid) {
+          const { c, r } = this.getGridPos(e);
+          
+          if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
+              const store = useGameStore.getState();
+              // Perform strict swap logic or move
+              // The store's moveUnit handles the swap if target is occupied
+              store.moveUnit(this.dragUnitId, r, c);
+          }
+      }
+
       this.dragUnitId = null;
+      this.dragStartGrid = null;
       this.canvas.style.cursor = 'default';
   };
 
