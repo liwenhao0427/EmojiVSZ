@@ -19,18 +19,6 @@ interface VisualUnit {
     hitFlash: number;
 }
 
-// Internal Loot interface
-interface Loot {
-    id: number;
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    value: number;
-    type: 'XP' | 'GOLD';
-    collected: boolean;
-}
-
 export class GameEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -43,7 +31,6 @@ export class GameEngine {
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
   private floatingTexts: FloatingText[] = [];
-  private loot: Loot[] = [];
   
   // Visual State Map (Separates Logic from Rendering)
   private visualUnits: Map<string, VisualUnit> = new Map();
@@ -76,7 +63,6 @@ export class GameEngine {
   public start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    // CRITICAL FIX: Reset lastTime to prevent huge dt on first frame
     this.lastTime = performance.now();
     this.loop(this.lastTime);
   }
@@ -90,7 +76,6 @@ export class GameEngine {
     this.enemies = [];
     this.projectiles = [];
     this.floatingTexts = [];
-    this.loot = []; 
     this.unitCooldowns.clear();
     
     // CRITICAL FIX: Fallback for duration to prevent instant skip
@@ -101,8 +86,6 @@ export class GameEngine {
     this.lastTimerUpdate = 0;
     this.callbacks?.onTimeUpdate?.(this.waveTime);
 
-    // If we are already running (e.g. from Shop), this just resets logic state.
-    // If not, we start.
     if (!this.isRunning) {
         this.start();
     }
@@ -135,7 +118,7 @@ export class GameEngine {
     const dtRaw = (timestamp - this.lastTime) / 1000;
     this.lastTime = timestamp;
     
-    // CRITICAL FIX: Clamp dt to max 0.1s to prevent huge jumps (tab switching/lag)
+    // Clamp dt to max 0.1s to prevent huge jumps
     const dt = Math.min(dtRaw, 0.1);
 
     this.update(dt, timestamp);
@@ -154,16 +137,40 @@ export class GameEngine {
 
     // 2. Logic Updates - Timer Countdown
     this.waveTime -= dt;
-    // Don't clamp strictly to 0 here to allow last-second spawns, checking <= 0 later
+
+    // --- FIX: Strict Wave End Logic ---
+    if (this.waveTime <= 0) {
+        this.waveTime = 0;
+        
+        // 1. Force Clear Entities
+        this.enemies = [];
+        this.projectiles = [];
+        this.floatingTexts = [];
+
+        // 2. Reset Units (Heal, Reset Energy)
+        const resetUnits = store.gridUnits.map(u => ({
+            ...u,
+            hp: u.maxHp,       // Full Heal
+            energy: 0,         // Reset Energy
+            isDead: false,     // Revive
+            hitFlash: 0
+        }));
+        
+        // Update store directly to reflect reset state immediately
+        useGameStore.setState({ gridUnits: resetUnits });
+
+        // 3. Trigger Wave End (App will handle Phase Switch to SHOP)
+        this.callbacks?.onWaveEnd?.();
+        return; // Stop update for this frame
+    }
 
     this.spawnEnemies(dt, store.stats.wave);
     this.updateUnits(dt, store.gridUnits);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
-    this.updateLoot(dt); 
     this.updateFloatingText(dt); 
 
-    // Throttled Timer Update (Prevent React flooding)
+    // Throttled Timer Update
     if (timestamp - this.lastTimerUpdate > 1000) {
         this.callbacks?.onTimeUpdate?.(Math.ceil(Math.max(0, this.waveTime)));
         this.lastTimerUpdate = timestamp;
@@ -174,17 +181,6 @@ export class GameEngine {
         store.setPhase(GamePhase.GAME_OVER);
         this.stop();
         return;
-    }
-
-    // End Conditions - Wave End
-    // Time must be up AND no enemies left
-    if (this.waveTime <= 0 && this.enemies.length === 0) {
-        this.waveTime = 0; // Clamp visual
-        store.resetWaveState(); 
-        this.enemies = [];
-        this.projectiles = [];
-        this.loot = [];
-        this.callbacks?.onWaveEnd?.();
     }
   }
 
@@ -232,65 +228,11 @@ export class GameEngine {
       }
   }
 
-  // --- FIX: Optimized Loot Logic (Target Hero or Center) ---
-  private updateLoot(dt: number) {
-      let totalXp = 0;
-      let totalGold = 0;
-      
-      const store = useGameStore.getState();
-      const hero = store.gridUnits.find(u => u.isHero && !u.isDead);
-      
-      // FIX: Default to screen center if hero is missing
-      let targetX = CANVAS_WIDTH / 2;
-      let targetY = CANVAS_HEIGHT / 2;
-
-      if (hero) {
-          const vis = this.visualUnits.get(hero.id);
-          if (vis) {
-              targetX = vis.x;
-              targetY = vis.y;
-          }
-      }
-
-      this.loot.forEach(l => {
-          if (l.collected) return;
-
-          // Basic Physics
-          l.x += l.vx * dt;
-          l.y += l.vy * dt;
-          l.vx *= 0.95; // Friction
-          l.vy *= 0.95;
-
-          const dx = targetX - l.x;
-          const dy = targetY - l.y;
-          const dist = Math.hypot(dx, dy);
-
-          // Magnet Logic (Always pull if reasonably close)
-          if (dist < 1200) { 
-              const speed = 1500; // Very fast pull
-              l.vx += (dx / dist) * speed * dt;
-              l.vy += (dy / dist) * speed * dt;
-              
-              if (dist < 40) {
-                  l.collected = true;
-                  if (l.type === 'XP') totalXp += l.value;
-                  else totalGold += l.value;
-              }
-          }
-      });
-
-      this.loot = this.loot.filter(l => !l.collected);
-
-      if (totalXp > 0 || totalGold > 0) {
-          this.callbacks?.onGainLoot?.(totalXp, totalGold);
-      }
-  }
-
   private spawnEnemies(dt: number, wave: number) {
       const config = WAVE_CONFIG.find(w => w.wave === wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
       if (!config) return;
 
-      // Spawn as long as time remains (Countdown logic)
+      // Spawn as long as time remains
       if (this.waveTime > 0) {
           this.spawnTimer -= dt;
           if (this.spawnTimer <= 0) {
@@ -451,20 +393,24 @@ export class GameEngine {
       this.projectiles = this.projectiles.filter(p => !p.markedForDeletion);
   }
 
+  // --- FIX: Instant Loot & Simplified Kill Logic ---
   private killEnemy(e: Enemy) {
+      if (e.markedForDeletion) return;
       e.markedForDeletion = true;
-      for(let i=0; i<3; i++) {
-          this.loot.push({
-              id: Math.random(),
-              x: e.x,
-              y: e.y,
-              vx: (Math.random() - 0.5) * 300,
-              vy: (Math.random() - 0.5) * 300,
-              value: 10,
-              type: Math.random() > 0.8 ? 'GOLD' : 'XP',
-              collected: false
-          });
-      }
+      
+      // Calculate Rewards based on enemy type
+      const isBoss = e.type === 'BOSS';
+      const isElite = e.type === 'ELITE';
+      
+      const xp = isBoss ? 50 : isElite ? 20 : 10;
+      const gold = isBoss ? 20 : isElite ? 10 : 5;
+
+      // 1. Instant Logic Callback
+      this.callbacks?.onGainLoot?.(xp, gold);
+
+      // 2. Visual Feedback Only (No physics bodies)
+      this.addText(e.x, e.y - 20, `+${xp} XP`, 'cyan');
+      this.addText(e.x, e.y - 50, `+${gold} G`, 'yellow');
   }
 
   private updateFloatingText(dt: number) {
@@ -473,7 +419,6 @@ export class GameEngine {
           t.y += t.velocity.y * dt;
           t.life -= dt;
       });
-      // FIX: Strict Cleanup
       this.floatingTexts = this.floatingTexts.filter(t => t.life > 0);
   }
 
@@ -496,7 +441,6 @@ export class GameEngine {
     activeUnits.forEach(u => this.drawUnit(u));
     this.drawEnemies(); 
     this.drawProjectiles();
-    this.drawLootBatched();
 
     if (draggingUnit) this.drawUnit(draggingUnit);
     this.drawFloatingTexts();
@@ -517,7 +461,7 @@ export class GameEngine {
     }
   }
 
-  // --- FIX: 3-Step Draw for Units (Ghosting Fix + Hit Flash) ---
+  // --- FIX: Visual Safety for Units ---
   private drawUnit(u: Unit) {
       const vis = this.visualUnits.get(u.id);
       if (!vis) return;
@@ -540,23 +484,24 @@ export class GameEngine {
 
       if (u.isDead) {
         this.ctx.globalAlpha = 0.5; 
+        this.ctx.fillStyle = 'white'; // Explicit color
         this.ctx.fillText('🪦', 0, 0);
         this.ctx.globalAlpha = 1.0; 
       } else {
-        // 1. BASE DRAW (Always Opaque)
+        // 1. BASE DRAW (Always Opaque & Clean Composite)
         this.ctx.globalAlpha = 1.0;
-        this.ctx.globalCompositeOperation = 'source-over'; // Strict reset
-        this.ctx.fillStyle = 'white'; // Prevent color pollution
+        this.ctx.globalCompositeOperation = 'source-over'; 
+        this.ctx.fillStyle = 'white'; 
         this.ctx.fillText(u.emoji, 0, 0);
 
-        // 2. HIT FLASH OVERLAY (FIXED)
+        // 2. HIT FLASH OVERLAY
         if (vis.hitFlash > 0) {
             this.ctx.save();
             this.ctx.globalCompositeOperation = 'source-atop';
             this.ctx.fillStyle = `rgba(255, 255, 255, 0.7)`;
             this.ctx.fillText(u.emoji, 0, 0);
             this.ctx.restore();
-            // Reset composite is handled by restore, but explicitly safe:
+            // Reset composite state
             this.ctx.globalCompositeOperation = 'source-over';
         }
 
@@ -585,11 +530,9 @@ export class GameEngine {
       this.ctx.restore();
   }
 
-  // --- FIX: 3-Step Draw for Enemies (Ghosting Fix + Hit Flash) ---
   private drawEnemies() {
       this.enemies.forEach(e => {
         this.ctx.save();
-        
         this.ctx.translate(e.x, e.y);
         this.ctx.font = '50px Arial';
         this.ctx.textAlign = 'center';
@@ -602,13 +545,13 @@ export class GameEngine {
             this.ctx.shadowBlur = 0;
         }
         
-        // 1. BASE DRAW (Always Opaque)
+        // 1. BASE DRAW
         this.ctx.globalAlpha = 1.0;
-        this.ctx.globalCompositeOperation = 'source-over'; // Strict Reset
+        this.ctx.globalCompositeOperation = 'source-over'; 
         this.ctx.fillStyle = 'white';
         this.ctx.fillText(e.emoji, 0, 0);
 
-        // 2. HIT FLASH OVERLAY (FIXED)
+        // 2. HIT FLASH OVERLAY
         if (e.hitFlash && e.hitFlash > 0) {
             this.ctx.save();
             this.ctx.globalCompositeOperation = 'source-atop';
@@ -637,24 +580,6 @@ export class GameEngine {
       });
   }
 
-  private drawLootBatched() {
-      if (this.loot.length === 0) return;
-
-      this.ctx.save();
-      this.ctx.shadowColor = 'gold';
-      this.ctx.shadowBlur = 10; 
-      this.ctx.fillStyle = '#fcd34d'; 
-
-      this.ctx.beginPath();
-      for (const l of this.loot) {
-          this.ctx.moveTo(l.x + 5, l.y); 
-          this.ctx.arc(l.x, l.y, 5, 0, Math.PI * 2);
-      }
-      this.ctx.fill(); 
-      this.ctx.restore();
-  }
-
-  // --- FIX: Explicit Render State Reset for Projectiles ---
   private drawProjectiles() {
       this.projectiles.forEach(p => {
         this.ctx.save();
@@ -667,7 +592,6 @@ export class GameEngine {
         // 2. Position & Rotation
         this.ctx.translate(p.x, p.y);
         
-        // Rotate if moving
         if (p.vx !== 0 || p.vy !== 0) {
             const angle = Math.atan2(p.vy, p.vx);
             this.ctx.rotate(angle);

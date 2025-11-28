@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/GameEngine';
 import { StartScreen } from './components/StartScreen';
-import { DraftModal } from './components/DraftModal';
+import { LevelUpModal } from './components/LevelUpModal';
 import { GameOverScreen } from './components/GameOverScreen';
 import { Shop } from './components/Shop';
 import { useGameStore } from './store/useGameStore';
@@ -11,10 +11,11 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG } from './constants';
 import { HUD } from './components/HUD';
 
 export default function App() {
-  const { phase, initGame, stats, startNextWave } = useGameStore();
+  const { phase, setPhase, initGame, stats, startNextWave } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [showLevelUp, setShowLevelUp] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -29,44 +30,90 @@ export default function App() {
         {
           onTimeUpdate: (t) => setTimeLeft(t),
           onGainLoot: (xp, gold) => {
-              useGameStore.getState().gainXp(xp);
+              // 1. Update State
+              const store = useGameStore.getState();
+              
+              let newXp = store.stats.xp + xp;
+              let newMaxXp = store.stats.maxXp;
+              let newLevel = store.stats.level;
+              let didLevelUp = false;
+
+              // Check Level Up Logic
+              if (newXp >= newMaxXp) {
+                  newXp -= newMaxXp;
+                  newLevel += 1;
+                  newMaxXp = Math.floor(newMaxXp * 1.2);
+                  didLevelUp = true;
+              }
+
               useGameStore.setState(s => ({ 
-                  stats: { ...s.stats, gold: s.stats.gold + gold } 
+                  stats: { 
+                      ...s.stats, 
+                      gold: s.stats.gold + gold,
+                      xp: newXp,
+                      maxXp: newMaxXp,
+                      level: newLevel
+                  } 
               }));
+
+              // 2. Trigger Level Up UI if needed
+              if (didLevelUp) {
+                  engineRef.current?.stop();
+                  setShowLevelUp(true);
+              }
           },
           onDamagePlayer: (amount) => {
-               // Optional: Trigger additional effects or sounds here
-               // Store handles damage logic in some cases, but direct HP updates might be safer here 
-               // if GameEngine calls this strictly for player/base damage.
-               // Currently GameEngine updates damage via store.damageUnit for Grid Units.
-               // If this callback is for "Base HP" (if different from units), handle it.
-               // But assuming this is just a hook for UI/Sound:
+               // Logic handled in store damageUnit usually, but can trigger sound/shake here
+          },
+          onWaveEnd: () => {
+              // Strict Wave End Transition -> Shop
+              setPhase(GamePhase.SHOP);
           }
         }
       );
     }
     
-    // We keep the engine running during SHOP and DRAFT phases so the grid continues to render 
-    // and interactions (like dragging units) still work, even if game logic (enemies) is paused.
-    if (phase === GamePhase.COMBAT || phase === GamePhase.SHOP || phase === GamePhase.DRAFT) {
-      engineRef.current?.start();
+    // We keep the engine running during SHOP so grid rendering works
+    // Pause during LEVEL UP (handled by manual start/stop in logic above) or START
+    if (phase === GamePhase.COMBAT || phase === GamePhase.SHOP) {
+      if (!showLevelUp) {
+        engineRef.current?.start();
+      }
     } else {
       engineRef.current?.stop();
     }
     
-    // FIX: Explicitly start the wave timer and logic when entering COMBAT
-    if (phase === GamePhase.COMBAT) {
+    // Explicitly start the wave timer and logic when entering COMBAT
+    if (phase === GamePhase.COMBAT && !showLevelUp) {
         const config = WAVE_CONFIG.find(w => w.wave === stats.wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
         engineRef.current?.startWave(config.duration, stats.wave);
     }
-  }, [phase, stats.wave]);
+  }, [phase, stats.wave, showLevelUp]);
 
   const handleRestart = () => {
-    initGame(); // Reset to Start Screen
+    initGame();
+    setShowLevelUp(false);
   };
 
   const handleStartGame = () => {
-    startNextWave(); // Wave 0 -> 1, Phase -> COMBAT
+    startNextWave();
+  };
+
+  const handleLevelUpSelect = (upgrade: any) => {
+      // Apply Upgrade Logic
+      const store = useGameStore.getState();
+      
+      if (upgrade.type === 'STAT') {
+          // Simplistic Stat Application
+          if (upgrade.label === "Max HP Up") {
+             useGameStore.setState(s => ({ stats: { ...s.stats, maxHp: s.stats.maxHp + upgrade.value, hp: s.stats.hp + upgrade.value } }));
+          } else if (upgrade.label === "Damage Up") {
+             useGameStore.setState(s => ({ stats: { ...s.stats, damagePercent: s.stats.damagePercent + upgrade.value } }));
+          }
+      }
+
+      setShowLevelUp(false);
+      engineRef.current?.start(); // Resume
   };
 
   return (
@@ -89,7 +136,6 @@ export default function App() {
           <>
             <HUD stats={stats} waveTime={timeLeft} currentWave={stats.wave} />
             
-            {/* Moved Drag Hint to Bottom Left to avoid UI overlap */}
             <div className="absolute bottom-4 left-4 pointer-events-none z-10">
                  <div className="bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 rounded-lg text-xs text-gray-400">
                    Drag units to swap positions
@@ -101,15 +147,21 @@ export default function App() {
         {/* Modals & Screens */}
         {phase === GamePhase.START && <StartScreen onStart={handleStartGame} />}
         
-        {phase === GamePhase.DRAFT && <DraftModal />}
+        {/* Level Up Overlay (Triggers on XP Threshold) */}
+        {showLevelUp && (
+            <LevelUpModal 
+                level={stats.level} 
+                onSelect={handleLevelUpSelect} 
+            />
+        )}
         
         {phase === GamePhase.SHOP && (
             <Shop 
                 stats={stats} 
                 currentWave={stats.wave}
                 onNextWave={startNextWave}
-                onBuyWeapon={(w) => { /* Add to AmmoBay/Grid logic if needed */ }}
-                onBuyItem={(i) => { /* Update stats logic */ }}
+                onBuyWeapon={(w) => { /* Add logic */ }}
+                onBuyItem={(i) => { /* Add logic */ }}
                 updateGold={(amount) => { useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold + amount } })) }}
             />
         )}
