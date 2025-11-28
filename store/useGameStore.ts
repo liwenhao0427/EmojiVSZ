@@ -1,5 +1,4 @@
 
-
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS } from '../constants';
@@ -317,19 +316,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   startNextWave: () => {
-    set(state => ({
-      stats: {
-        ...state.stats,
-        level: 1,
-        xp: 0,
-        maxXp: INITIAL_STATS.maxXp,
-        wave: state.stats.wave + 1
-      },
-      phase: GamePhase.COMBAT
-    }));
-  },
-
-  resetWaveState: () => {
     set(state => {
       const nextUnits = state.gridUnits
         .filter(u => !u.isTemp && !u.isDead) 
@@ -341,12 +327,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       nextStats.tempAttackSpeedMult = 0;
       nextStats.heroTempDamageMult = 0;
       nextStats.heroTempAttackSpeedMult = 0;
+      
+      // Increment wave and reset per-wave stats
+      nextStats.wave = state.stats.wave + 1;
+      nextStats.level = 1;
+      nextStats.xp = 0;
+      nextStats.maxXp = INITIAL_STATS.maxXp;
 
       return {
         gridUnits: nextUnits,
         stats: nextStats,
         draftOptions: [], 
-        phase: GamePhase.SHOP
+        phase: GamePhase.COMBAT
+      };
+    });
+  },
+
+  resetWaveState: () => {
+    set(state => {
+      // Just clean up units between waves. Wave increment and stat resets are handled in startNextWave.
+      const nextUnits = state.gridUnits
+        .filter(u => !u.isTemp && !u.isDead) 
+        .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
+      
+      return {
+        gridUnits: nextUnits,
       };
     });
   },

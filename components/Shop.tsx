@@ -84,7 +84,8 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
 
   useEffect(() => {
     generateShop(false);
-  }, []);
+    setRerollCount(0);
+  }, [stats.wave]);
 
   const handleBuy = (shopItem: ShopItem) => {
     if (stats.gold >= shopItem.price && !shopItem.bought) {

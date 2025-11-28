@@ -77,42 +77,46 @@ export class UnitSystem implements System {
       
       const target = validEnemies.sort((a,b) => Math.hypot(a.x - unitX, a.y - unitY) - Math.hypot(b.x - unitX, b.y - unitY))[0];
 
-      if (target) {
-        const damage = this.calculateFinalDamage(u, store.stats);
+      // Attack unconditionally if cooldown is ready.
+      const damage = this.calculateFinalDamage(u, store.stats);
 
-        switch (u.attackPattern) {
-            case 'THRUST':
-                u.attackState = 'ATTACKING';
-                u.attackProgress = 0;
-                target.hp -= damage;
-                target.hitFlash = 0.2;
-                callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'white', target.x, target.y);
-                if (target.hp <= 0) this.killEnemy(target, gameState, callbacks);
-                break;
-            case 'SWING':
-                u.attackState = 'ATTACKING';
-                u.attackProgress = 0;
-                gameState.enemies.forEach(e => {
-                    const dist = Math.hypot(e.x - unitX, e.y - unitY);
-                    const angle = Math.atan2(e.y - unitY, e.x - unitX);
-                    if (dist <= u.range && Math.abs(angle) < Math.PI / 4) {
-                        e.hp -= damage;
-                        e.hitFlash = 0.2;
-                        callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'white', e.x, e.y);
-                        if (e.hp <= 0) this.killEnemy(e, gameState, callbacks);
-                    }
-                });
-                break;
-            case 'STREAM':
-            case 'SHOOT':
-            default:
-                this.fireProjectile(u, unitX, unitY, target, gameState);
-                break;
-        }
-        
-        const buff = (1 + (store.stats.attackSpeed / 100)) * heroAspdBuff;
-        this.unitCooldowns.set(u.id, u.maxCooldown / buff);
+      switch (u.attackPattern) {
+          case 'THRUST':
+              u.attackState = 'ATTACKING';
+              u.attackProgress = 0;
+              gameState.enemies.forEach(e => {
+                  if (e.row === u.row && e.x > unitX && e.x < unitX + u.range) {
+                      e.hp -= damage;
+                      e.hitFlash = 0.2;
+                      callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'white', e.x, e.y);
+                      if (e.hp <= 0) this.killEnemy(e, gameState, callbacks);
+                  }
+              });
+              break;
+          case 'SWING':
+              u.attackState = 'ATTACKING';
+              u.attackProgress = 0;
+              gameState.enemies.forEach(e => {
+                  const dist = Math.hypot(e.x - unitX, e.y - unitY);
+                  const angle = Math.atan2(e.y - unitY, e.x - unitX);
+                  if (dist <= u.range && Math.abs(angle) < Math.PI / 4) {
+                      e.hp -= damage;
+                      e.hitFlash = 0.2;
+                      callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'white', e.x, e.y);
+                      if (e.hp <= 0) this.killEnemy(e, gameState, callbacks);
+                  }
+              });
+              break;
+          case 'STREAM':
+          case 'SHOOT':
+          default:
+              this.fireProjectile(u, unitX, unitY, target, gameState);
+              break;
       }
+      
+      // Reset cooldown unconditionally after an attack action.
+      const buff = (1 + (store.stats.attackSpeed / 100)) * heroAspdBuff;
+      this.unitCooldowns.set(u.id, u.maxCooldown / buff);
     });
   }
 
@@ -204,11 +208,11 @@ export class UnitSystem implements System {
     });
   }
 
-  private fireProjectile(u: Unit, x: number, y: number, target: Enemy, gameState: GameState) {
+  private fireProjectile(u: Unit, x: number, y: number, target: Enemy | undefined, gameState: GameState) {
     const store = useGameStore.getState();
     const damage = this.calculateFinalDamage(u, store.stats);
     
-    const projectileType: 'LINEAR' | 'TRACKING' = (u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC' ? 'TRACKING' : 'LINEAR';
+    const projectileType: 'LINEAR' | 'TRACKING' = ((u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC') && target ? 'TRACKING' : 'LINEAR';
 
     const createBaseProjectile = (startY: number): Omit<Projectile, 'id'> => ({
       x, y: startY,
@@ -218,7 +222,7 @@ export class UnitSystem implements System {
       radius: 10,
       markedForDeletion: false,
       type: projectileType,
-      targetId: projectileType === 'TRACKING' ? target.id : undefined,
+      targetId: projectileType === 'TRACKING' && target ? target.id : undefined,
       originType: u.type,
       effects: u.effects,
       life: u.attackPattern === 'STREAM' ? 0.75 : undefined,

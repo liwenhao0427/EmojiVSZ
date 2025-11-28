@@ -132,7 +132,7 @@ export class GameEngine {
 
     if (this.gameState.waveTime <= 0) {
       this.gameState.waveTime = 0;
-      store.resetWaveState();
+      useGameStore.getState().resetWaveState();
       this.callbacks.onWaveEnd?.();
       return; 
     }

@@ -46,7 +46,7 @@ export default function App() {
               if (newXp >= newMaxXp) {
                   newXp -= newMaxXp;
                   newLevel += 1;
-                  newMaxXp = INITIAL_STATS.maxXp + (newLevel - 1) * 25; // Linear XP Scaling
+                  newMaxXp = INITIAL_STATS.maxXp + (newLevel - 1) * 10; // Reduced XP Scaling
                   didLevelUp = true;
               }
 

@@ -19,7 +19,7 @@ export const INITIAL_STATS: PlayerStats = {
   heroMaxXp: 50, // Lower initial XP
   level: 1,
   xp: 0,
-  maxXp: 50, // Lower initial XP
+  maxXp: 100, // Doubled initial XP requirement
   
   damagePercent: 0,
   attackSpeed: 0,

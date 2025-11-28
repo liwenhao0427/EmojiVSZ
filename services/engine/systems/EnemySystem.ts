@@ -54,37 +54,43 @@ export class EnemySystem implements System {
     
     const totalToSpawn = totalSpawnQueue.length;
     
-    // 3. Dynamically schedule bursts based on wave duration
-    const BURST_INTERVAL = 10;
-    const TOTAL_BURST_PERCENTAGE = 0.90;
-    const SLOPE_MODIFIER = 0.05; // Controls the steepness of the ramp (e.g., 0.05 means +/- 5% from the average)
+    // 3. Define new spawn rhythm percentages
+    const MAJOR_BURST_PERCENT = 0.70;
+    const MINOR_BURST_PERCENT = 0.20;
 
-    const numBursts = Math.floor(config.duration / BURST_INTERVAL);
-
-    if (numBursts > 0) {
-        const basePercentPerBurst = TOTAL_BURST_PERCENTAGE / numBursts;
-        
-        for (let i = 0; i < numBursts; i++) {
-            // Create a ramp from -1 to 1 to make spawn rates increase over time
-            const ramp = (numBursts > 1) ? (i / (numBursts - 1)) * 2 - 1 : 0;
-            const percentForThisBurst = basePercentPerBurst + (ramp * SLOPE_MODIFIER);
-            const countForThisBurst = Math.floor(totalToSpawn * percentForThisBurst);
-
+    const majorBurstTotalEnemies = Math.floor(totalToSpawn * MAJOR_BURST_PERCENT);
+    const minorBurstTotalEnemies = Math.floor(totalToSpawn * MINOR_BURST_PERCENT);
+    
+    // 4. Schedule major bursts (at 10s intervals)
+    const numMajorBursts = Math.floor(config.duration / 10);
+    if (numMajorBursts > 0) {
+        const enemiesPerMajorBurst = Math.floor(majorBurstTotalEnemies / numMajorBursts);
+        for (let i = 1; i <= numMajorBursts; i++) {
             this.burstSchedule.push({
-                time: i * BURST_INTERVAL,
-                enemies: totalSpawnQueue.splice(0, countForThisBurst)
+                time: i * 10,
+                enemies: totalSpawnQueue.splice(0, enemiesPerMajorBurst)
             });
         }
-    } else {
-        // Fallback for very short waves: put 90% in an immediate burst
-        const burstCount = Math.floor(totalToSpawn * TOTAL_BURST_PERCENTAGE);
-        this.burstSchedule.push({
-            time: 0,
-            enemies: totalSpawnQueue.splice(0, burstCount)
-        });
     }
 
-    // 4. Anything left in the queue is for trickling
+    // 5. Schedule minor bursts (at 5s intervals, skipping 10s intervals)
+    const numMinorBursts = Math.floor(config.duration / 5) - numMajorBursts;
+    if (numMinorBursts > 0) {
+        const enemiesPerMinorBurst = Math.floor(minorBurstTotalEnemies / numMinorBursts);
+        for (let i = 1; i <= Math.floor(config.duration / 5); i++) {
+            if ((i * 5) % 10 !== 0) { // Only on 5, 15, 25...
+                this.burstSchedule.push({
+                    time: i * 5,
+                    enemies: totalSpawnQueue.splice(0, enemiesPerMinorBurst)
+                });
+            }
+        }
+    }
+    
+    // Sort the schedule by time to ensure correct execution order
+    this.burstSchedule.sort((a, b) => a.time - b.time);
+
+    // 6. Anything left in the queue is for trickling
     this.trickleQueue = totalSpawnQueue;
     if (this.trickleQueue.length > 0) {
         this.trickleInterval = config.duration / this.trickleQueue.length;
@@ -98,7 +104,14 @@ export class EnemySystem implements System {
     // Check for and execute scheduled bursts
     if (this.nextBurstIndex < this.burstSchedule.length && this.waveElapsedTime >= this.burstSchedule[this.nextBurstIndex].time) {
         const burst = this.burstSchedule[this.nextBurstIndex];
-        burst.enemies.forEach(enemyId => this.spawnSingleEnemy(enemyId, gameState));
+        
+        // Distribute enemies evenly across rows to avoid stacking
+        let spawnRowCounter = Math.floor(Math.random() * GRID_ROWS);
+        for(const enemyId of burst.enemies) {
+            this.spawnSingleEnemy(enemyId, gameState, spawnRowCounter);
+            spawnRowCounter = (spawnRowCounter + 1) % GRID_ROWS;
+        }
+
         this.nextBurstIndex++;
     }
 
@@ -113,17 +126,32 @@ export class EnemySystem implements System {
     }
   }
   
-  private spawnSingleEnemy(enemyId: string, gameState: GameState) {
+  private spawnSingleEnemy(enemyId: string, gameState: GameState, forcedRow?: number) {
     if (!enemyId) return;
     const typeData = ENEMY_DATA[enemyId];
     if (!typeData) return;
-    
+
     const wave = useGameStore.getState().stats.wave;
-    
+
+    // First, determine a consistent row for both positioning and logic
+    const spawnRow = (forcedRow !== undefined) ? forcedRow : Math.floor(Math.random() * GRID_ROWS);
+    const spawnY = GRID_OFFSET_Y + (spawnRow * CELL_SIZE) + (CELL_SIZE / 2);
+
+    // Find the rightmost enemy in the same row to prevent perfect stacking.
+    const rightmostEnemyInRowX = gameState.enemies
+      .filter(e => e.row === spawnRow)
+      .reduce((max_x, e) => Math.max(e.x, max_x), 0);
+
+    const baseSpawnX = CANVAS_WIDTH + 50;
+    const spawnOffset = 15; // Small pixel offset to stagger spawns.
+
+    // Spawn behind the rightmost enemy in the lane, or at the default position if the lane is clear.
+    const spawnX = Math.max(baseSpawnX, rightmostEnemyInRowX + spawnOffset);
+
     gameState.enemies.push({
       id: Math.random(),
-      x: CANVAS_WIDTH + 50,
-      y: GRID_OFFSET_Y + (Math.floor(Math.random() * GRID_ROWS) * CELL_SIZE) + (CELL_SIZE / 2),
+      x: spawnX,
+      y: spawnY,
       radius: 24 * typeData.scale,
       markedForDeletion: false,
       hp: typeData.baseHp + typeData.hpPerWave * (wave - 1),
@@ -133,7 +161,7 @@ export class EnemySystem implements System {
       description: typeData.name,
       type: typeData.type as any,
       damage: typeData.damage,
-      row: Math.floor(Math.random() * GRID_ROWS),
+      row: spawnRow, // Use the single, consistent calculated row
       attackTimer: 0,
       isAttacking: false,
       frozen: 0,
