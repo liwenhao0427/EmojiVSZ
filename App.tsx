@@ -7,9 +7,10 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { GameOverScreen } from './components/GameOverScreen';
 import { Shop } from './components/Shop';
 import { useGameStore } from './store/useGameStore';
-import { GamePhase, DraftOption } from './types';
+import { GamePhase, DraftOption, InspectableEntity } from './types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG } from './constants';
 import { HUD } from './components/HUD';
+import { InspectorPanel } from './components/InspectorPanel';
 
 export default function App() {
   const { phase, setPhase, initGame, stats, startNextWave, applyDraft } = useGameStore();
@@ -17,6 +18,7 @@ export default function App() {
   const engineRef = useRef<GameEngine | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const [inspectedEntity, setInspectedEntity] = useState<InspectableEntity>(null);
 
   // Initial load
   useEffect(() => {
@@ -70,6 +72,9 @@ export default function App() {
           onGameOver: () => {
               engineRef.current?.stop();
               setPhase(GamePhase.GAME_OVER);
+          },
+          onInspect: (entity) => {
+              setInspectedEntity(entity);
           }
         }
       );
@@ -94,6 +99,7 @@ export default function App() {
   const handleRestart = () => {
     initGame();
     setShowLevelUp(false);
+    setInspectedEntity(null);
   };
 
   const handleStartGame = () => {
@@ -125,6 +131,7 @@ export default function App() {
         {(phase === GamePhase.COMBAT || phase === GamePhase.SHOP) && (
           <>
             <HUD stats={stats} waveTime={timeLeft} currentWave={stats.wave} />
+            <InspectorPanel entity={inspectedEntity} />
             
             <div className="absolute bottom-4 left-4 pointer-events-none z-10">
                  <div className="bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 rounded-lg text-xs text-gray-400">

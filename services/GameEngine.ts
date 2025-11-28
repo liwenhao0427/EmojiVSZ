@@ -1,6 +1,6 @@
 
 
-import { Unit, Enemy, Projectile, FloatingText, GamePhase, PlayerStats, AmmoBayState } from '../types';
+import { Unit, Enemy, Projectile, FloatingText, GamePhase, PlayerStats, AmmoBayState, InspectableEntity } from '../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG, ENEMY_TYPES } from '../constants';
 import { useGameStore } from '../store/useGameStore';
 
@@ -11,6 +11,7 @@ interface EngineCallbacks {
     onLootGoblinKill?: () => void;
     onTimeUpdate?: (timeLeft: number) => void;
     onGameOver?: () => void;
+    onInspect?: (entity: InspectableEntity) => void; // New Inspection Callback
 }
 
 // Internal visual state for smoothing animations
@@ -46,6 +47,10 @@ export class GameEngine {
   private mouseX: number = 0;
   private mouseY: number = 0;
   private unitCooldowns: Map<string, number> = new Map();
+  
+  // Inspection State
+  private selectedEntityId: string | number | null = null; // Locked selection
+  private lastInspectedId: string | number | null = null;
 
   // Callbacks & Throttling
   private callbacks?: EngineCallbacks;
@@ -83,7 +88,10 @@ export class GameEngine {
     
     this.waveTime = (duration && duration > 0) ? duration : 30; 
     this.spawnTimer = 2.0; 
-    
+    this.selectedEntityId = null;
+    this.lastInspectedId = null;
+    this.callbacks?.onInspect?.(null);
+
     // Reset timer throttle
     this.lastTimerUpdate = 0;
     this.callbacks?.onTimeUpdate?.(this.waveTime);
@@ -131,10 +139,19 @@ export class GameEngine {
     
     // 1. Visual Interpolation (Runs in all phases for smooth drag)
     this.updateGridVisuals(dt, store.gridUnits);
+    
+    // 2. Continuous Inspection Check (To track moving enemies if hovered)
+    // Only check if we are NOT locked
+    if (!this.selectedEntityId) {
+        this.checkInspectionHover();
+    } else {
+        // If locked, we still need to update the data as stats change (hp)
+        this.refreshInspectionData(this.selectedEntityId);
+    }
 
     if (store.phase !== GamePhase.COMBAT) return;
 
-    // 2. Logic Updates
+    // 3. Logic Updates
     this.waveTime -= dt;
 
     if (this.waveTime <= 0) {
@@ -161,6 +178,70 @@ export class GameEngine {
         this.lastTimerUpdate = timestamp;
     }
   }
+
+  // --- Inspection Logic ---
+  
+  private findEntityAt(mx: number, my: number): InspectableEntity {
+      // 1. Check Units (Grid)
+      // Reverse iterate to catch top layer if needed (though grid is single layer)
+      const store = useGameStore.getState();
+      const units = store.gridUnits;
+      
+      const { c, r } = this.getGridPosFromCoords(mx, my);
+      if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
+          const unit = units.find(u => u.row === r && u.col === c);
+          if (unit) return { type: 'UNIT', data: unit };
+      }
+
+      // 2. Check Enemies (Distance)
+      // Check in reverse order (top rendered first)
+      for (let i = this.enemies.length - 1; i >= 0; i--) {
+          const e = this.enemies[i];
+          const dist = Math.hypot(e.x - mx, e.y - my);
+          if (dist <= e.radius) {
+              return { type: 'ENEMY', data: e };
+          }
+      }
+      
+      return null;
+  }
+
+  private checkInspectionHover() {
+      const entity = this.findEntityAt(this.mouseX, this.mouseY);
+      
+      const currentId = entity ? (entity.type === 'UNIT' ? entity.data.id : entity.data.id) : null;
+
+      if (currentId !== this.lastInspectedId) {
+          this.lastInspectedId = currentId as string | number;
+          this.callbacks?.onInspect?.(entity);
+      }
+  }
+
+  private refreshInspectionData(id: string | number) {
+       // Re-fetch the data for the locked ID to keep UI updated (e.g. Health bars decreasing)
+       const store = useGameStore.getState();
+       
+       if (typeof id === 'string') {
+           // Unit
+           const unit = store.gridUnits.find(u => u.id === id);
+           if (unit) this.callbacks?.onInspect?.({ type: 'UNIT', data: unit });
+           else {
+               // Unit died or moved?
+               this.selectedEntityId = null; // Unlock
+               this.callbacks?.onInspect?.(null);
+           }
+       } else {
+           // Enemy
+           const enemy = this.enemies.find(e => e.id === id);
+           if (enemy) this.callbacks?.onInspect?.({ type: 'ENEMY', data: enemy });
+           else {
+               // Enemy died
+               this.selectedEntityId = null;
+               this.callbacks?.onInspect?.(null);
+           }
+       }
+  }
+
 
   // --- Visual Interpolation ---
   private updateGridVisuals(dt: number, units: Unit[]) {
@@ -235,7 +316,8 @@ export class GameEngine {
                   attackTimer: 0,
                   isAttacking: false,
                   frozen: 0,
-                  hitFlash: 0
+                  hitFlash: 0,
+                  name: typeId.toUpperCase()
               });
           }
       }
@@ -430,6 +512,11 @@ export class GameEngine {
 
     if (draggingUnit) this.drawUnit(draggingUnit);
     this.drawFloatingTexts();
+    
+    // Draw Locked Indicator
+    if (this.selectedEntityId) {
+        this.drawSelection(this.selectedEntityId);
+    }
   }
 
   private drawGrid() {
@@ -560,6 +647,53 @@ export class GameEngine {
         this.ctx.restore();
       });
   }
+  
+  private drawSelection(id: string | number) {
+      let x = 0, y = 0, radius = 40;
+      const store = useGameStore.getState();
+      
+      if (typeof id === 'string') {
+          // Unit
+          const u = store.gridUnits.find(unit => unit.id === id);
+          if (u) {
+             x = GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE/2;
+             y = GRID_OFFSET_Y + u.row * CELL_SIZE + CELL_SIZE/2;
+             radius = 50;
+          }
+      } else {
+          // Enemy
+          const e = this.enemies.find(enemy => enemy.id === id);
+          if (e) {
+              x = e.x;
+              y = e.y;
+              radius = e.radius + 10;
+          }
+      }
+
+      if (x !== 0) {
+          this.ctx.save();
+          this.ctx.strokeStyle = '#22d3ee'; // Cyan
+          this.ctx.lineWidth = 3;
+          this.ctx.setLineDash([5, 5]);
+          this.ctx.beginPath();
+          this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+          this.ctx.stroke();
+          
+          // Rotating indicators
+          const time = performance.now() / 500;
+          for(let i=0; i<4; i++) {
+              const angle = time + (i * Math.PI/2);
+              const tx = x + Math.cos(angle) * radius;
+              const ty = y + Math.sin(angle) * radius;
+              this.ctx.fillStyle = '#22d3ee';
+              this.ctx.beginPath();
+              this.ctx.arc(tx, ty, 3, 0, Math.PI*2);
+              this.ctx.fill();
+          }
+
+          this.ctx.restore();
+      }
+  }
 
   private drawProjectiles() {
       this.projectiles.forEach(p => {
@@ -592,8 +726,21 @@ export class GameEngine {
   // --- Input Handlers (Modified for Strict Swap) ---
   private handleMouseDown = (e: MouseEvent) => {
       this.updateMouseCoords(e);
-      const { c, r } = this.getGridPos(e);
+      const entity = this.findEntityAt(this.mouseX, this.mouseY);
+      
+      // 1. Lock Inspection
+      if (entity) {
+          const id = entity.type === 'UNIT' ? entity.data.id : entity.data.id;
+          this.selectedEntityId = id;
+          this.callbacks?.onInspect?.(entity);
+      } else {
+          // Clicked empty space -> Unlock
+          this.selectedEntityId = null;
+          this.callbacks?.onInspect?.(null);
+      }
 
+      // 2. Drag Logic (Existing)
+      const { c, r } = this.getGridPosFromCoords(this.mouseX, this.mouseY);
       if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
           const store = useGameStore.getState();
           const unit = store.gridUnits.find(u => u.row === r && u.col === c);
@@ -612,8 +759,6 @@ export class GameEngine {
       this.updateMouseCoords(e);
       if (this.dragUnitId) {
           this.canvas.style.cursor = 'grabbing';
-          // NOTE: We do NOT update store.moveUnit here anymore. 
-          // We only update mouse coords which update visual position in updateGridVisuals
       } else {
           this.canvas.style.cursor = 'default';
       }
@@ -621,7 +766,7 @@ export class GameEngine {
 
   private handleMouseUp = (e: MouseEvent) => {
       if (this.dragUnitId && this.dragStartGrid) {
-          const { c, r } = this.getGridPos(e);
+          const { c, r } = this.getGridPosFromCoords(this.mouseX, this.mouseY);
           
           if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
               const store = useGameStore.getState();
@@ -642,10 +787,7 @@ export class GameEngine {
       this.mouseY = (e.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
   }
 
-  private getGridPos(e: MouseEvent) {
-      const rect = this.canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) * (CANVAS_WIDTH / rect.width);
-      const y = (e.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
+  private getGridPosFromCoords(x: number, y: number) {
       const c = Math.floor((x - GRID_OFFSET_X) / CELL_SIZE);
       const r = Math.floor((y - GRID_OFFSET_Y) / CELL_SIZE);
       return { c, r };

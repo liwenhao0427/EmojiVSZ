@@ -113,6 +113,8 @@ export interface Enemy extends Entity {
   isAttacking: boolean; 
   frozen: number; 
   hitFlash?: number; 
+  // Added for Inspection
+  name?: string; 
 }
 
 export interface Projectile extends Entity {
@@ -172,3 +174,12 @@ export interface ShopItem {
   locked: boolean;
   bought: boolean;
 }
+
+// Union type for inspection
+export type InspectableEntity = {
+    type: 'UNIT';
+    data: Unit;
+} | {
+    type: 'ENEMY';
+    data: Enemy;
+} | null;

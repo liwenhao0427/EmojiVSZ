@@ -189,8 +189,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startNextWave: () => {
       set(state => {
+          // RESET LOGIC: Reset Level and XP every wave to build fresh synergies
+          const resetStats = {
+              ...state.stats,
+              heroLevel: 1,
+              heroXp: 0,
+              heroMaxXp: 100,
+              level: 1, // Sync with heroLevel
+              xp: 0,
+              maxXp: 100,
+              wave: state.stats.wave + 1
+          };
+
           return {
-              stats: { ...state.stats, wave: state.stats.wave + 1 },
+              stats: resetStats,
               phase: GamePhase.COMBAT
           };
       });
