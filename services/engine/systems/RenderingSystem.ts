@@ -1,4 +1,5 @@
 
+
 import { GameState } from '../GameState';
 import { Unit, InspectableEntity } from '../../../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../constants';
@@ -11,6 +12,7 @@ interface VisualUnit {
   y: number;
   scale: number;
   hitFlash: number;
+  offsetX: number;
 }
 
 export class RenderingSystem {
@@ -25,7 +27,6 @@ export class RenderingSystem {
     }
   }
 
-  // Update visual state (interpolation, flashes)
   public update(dt: number) {
     const units = useGameStore.getState().gridUnits;
     const LERP_FACTOR = 1 - Math.pow(0.001, dt);
@@ -39,25 +40,38 @@ export class RenderingSystem {
           x: GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE / 2,
           y: GRID_OFFSET_Y + u.row * CELL_SIZE + CELL_SIZE / 2,
           scale: 1,
-          hitFlash: 0
+          hitFlash: 0,
+          offsetX: 0,
         });
       }
 
       const vis = this.visualUnits.get(u.id)!;
+      if (u.hitFlash && u.hitFlash > 0) {
+        vis.hitFlash = u.hitFlash;
+        u.hitFlash = 0;
+      }
       if (vis.hitFlash > 0) vis.hitFlash -= dt;
 
       const isDragging = this.inputSystem.dragUnitId === u.id;
+
+      let lungeOffset = 0;
+      if (u.attackPattern === 'THRUST' && u.attackState === 'ATTACKING' && u.attackProgress) {
+          const lungeDistance = u.range * 0.5;
+          lungeOffset = Math.sin(u.attackProgress * Math.PI) * lungeDistance;
+      }
 
       if (isDragging) {
         vis.x = this.inputSystem.mouseX;
         vis.y = this.inputSystem.mouseY;
         vis.scale += (1.15 - vis.scale) * LERP_FACTOR;
+        vis.offsetX += (0 - vis.offsetX) * LERP_FACTOR;
       } else {
         const targetX = GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE / 2;
         const targetY = GRID_OFFSET_Y + u.row * CELL_SIZE + CELL_SIZE / 2;
         vis.x += (targetX - vis.x) * LERP_FACTOR;
         vis.y += (targetY - vis.y) * LERP_FACTOR;
         vis.scale += (1.0 - vis.scale) * LERP_FACTOR;
+        vis.offsetX += (lungeOffset - vis.offsetX) * LERP_FACTOR;
       }
     });
 
@@ -124,9 +138,9 @@ export class RenderingSystem {
     const vis = this.visualUnits.get(u.id);
     if (!vis) return;
 
-    const { x, y, scale } = vis;
+    const { x, y, scale, offsetX } = vis;
     this.ctx.save();
-    this.ctx.translate(x, y);
+    this.ctx.translate(x + offsetX, y);
     this.ctx.scale(scale, scale);
 
     if (u.id === this.inputSystem.dragUnitId) {
@@ -135,9 +149,24 @@ export class RenderingSystem {
       this.ctx.shadowOffsetY = 10;
     }
 
+    if (u.attackPattern === 'SWING' && u.attackState === 'ATTACKING' && u.attackProgress) {
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.7 * Math.sin(u.attackProgress * Math.PI);
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.arc(0, 0, u.range, -Math.PI / 4, Math.PI / 4, false);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.restore();
+    }
+
     this.ctx.font = '60px Arial';
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
+    
+    if (u.state === 'ARMING') this.ctx.globalAlpha = 0.5 + Math.sin(performance.now() / 100) * 0.2;
+    else this.ctx.globalAlpha = 1.0;
 
     if (u.isDead) {
       this.ctx.globalAlpha = 0.5;
@@ -147,9 +176,9 @@ export class RenderingSystem {
         this.ctx.shadowColor = 'cyan';
         this.ctx.shadowBlur = 10;
       }
-      this.ctx.globalAlpha = 1.0;
       this.ctx.fillStyle = 'white';
       this.ctx.fillText(u.emoji, 0, 0);
+      this.ctx.globalAlpha = 1.0;
 
       if (vis.hitFlash > 0) {
         this.ctx.globalCompositeOperation = 'source-atop';
@@ -166,6 +195,8 @@ export class RenderingSystem {
       const barX = -barWidth / 2;
       const barY = -40;
 
+      this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      this.ctx.fillRect(barX, barY, barWidth, barHeight);
       this.ctx.fillStyle = 'red';
       this.ctx.fillRect(barX, barY, barWidth, barHeight);
       this.ctx.fillStyle = 'green';
@@ -174,7 +205,7 @@ export class RenderingSystem {
       if (u.isHero) {
         const maxEnergy = useGameStore.getState().stats.heroMaxEnergy || 100;
         const ep = (u.energy || 0) / maxEnergy;
-        this.ctx.fillStyle = 'blue';
+        this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
         this.ctx.fillRect(barX, barY + 80, barWidth, 4);
         this.ctx.fillStyle = 'cyan';
         this.ctx.fillRect(barX, barY + 80, barWidth * ep, 4);
@@ -201,6 +232,9 @@ export class RenderingSystem {
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
       this.ctx.fillStyle = 'white';
+      
+      if (e.slowTimer && e.slowTimer > 0) this.ctx.fillStyle = '#67e8f9';
+
       this.ctx.globalAlpha = 1.0;
       this.ctx.fillText(e.emoji, 0, 0);
 
@@ -276,10 +310,18 @@ export class RenderingSystem {
         const angle = Math.atan2(p.vy, p.vx);
         this.ctx.rotate(angle);
       }
-      this.ctx.font = '24px Arial';
+      
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(p.emoji, 0, 0);
+      if(p.emoji) {
+        this.ctx.font = '24px Arial';
+        this.ctx.fillText(p.emoji, 0, 0);
+      } else {
+        this.ctx.fillStyle = 'yellow';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
       this.ctx.restore();
     });
   }

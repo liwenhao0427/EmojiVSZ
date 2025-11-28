@@ -1,16 +1,30 @@
 
-
 import React from 'react';
-import { TEMP_UNIT_POOL, WEAPON_POOL } from '../constants';
-// FIX: Import WeaponClass to use for type casting.
-import { PlayerStats, DraftOption, Unit, WeaponClass } from '../types';
+import { TEMP_UNIT_POOL } from '../constants';
+import { PlayerStats, DraftOption, Unit, WeaponClass, UnitData } from '../types';
 import { Sparkles, Sword, Zap } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { UNIT_DATA } from '../data/units';
 
 interface LevelUpModalProps {
   onSelect: (option: DraftOption) => void;
   level: number;
 }
+
+// Convert UnitData to a partial Unit for drafting
+const unitDataToDraftUnit = (w: UnitData): Partial<Unit> => ({
+    name: w.name,
+    emoji: w.emoji,
+    type: w.type,
+    damage: w.damage,
+    maxCooldown: w.cd,
+    hp: w.maxHp,
+    maxHp: w.maxHp,
+    range: w.range,
+    description: `一个临时的 ${w.name}，仅在本波次生效。`,
+    effects: w.effect,
+});
+
 
 export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) => {
   const [options, setOptions] = React.useState<DraftOption[]>([]);
@@ -21,33 +35,22 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
       // Higher chance for dedicated temp units
       ...TEMP_UNIT_POOL,
       ...TEMP_UNIT_POOL,
-      // Add all buyable weapons as potential temp units
-      ...WEAPON_POOL.map(w => ({
-        name: w.name,
-        emoji: w.emoji,
-        // FIX: Cast weaponClass to WeaponClass to match the Unit type.
-        type: w.weaponClass as WeaponClass,
-        damage: w.damage,
-        maxCooldown: w.cooldown,
-        hp: 100,
-        maxHp: 100,
-        range: 1200, // A standard range for drafted units
-        description: `A temporary ${w.name} for this wave only.`
-      }))
+      // Add all buyable units as potential temp units
+      ...Object.values(UNIT_DATA).map(unitDataToDraftUnit)
     ];
 
     const heroUpgrades: Omit<DraftOption, 'id'>[] = [
-        { type: 'TEMP_BUFF', name: 'Tri-Shot', emoji: '🔱', description: 'Hero fires 3 projectiles, covering adjacent rows.', data: { heroAttackType: 'TRI_SHOT' } },
-        { type: 'TEMP_BUFF', name: 'Penta-Shot', emoji: '🖐️', description: 'Hero fires 5 projectiles, covering all rows.', data: { heroAttackType: 'PENTA_SHOT' } },
-        { type: 'TEMP_BUFF', name: 'Seeking Shots', emoji: '🎯', description: 'Hero projectiles now track enemies.', data: { heroAttackType: 'TRACKING' } },
-        { type: 'TEMP_BUFF', name: 'Focused Energy', emoji: '🧘', description: 'Ultimate requires 20 less energy to cast.', data: { heroMaxEnergy: -20 } },
-        { type: 'TEMP_BUFF', name: 'Rapid Charge', emoji: '⚡️', description: 'Ultimate energy charges 50% faster.', data: { heroEnergyGainRate: 0.5 } },
+        { type: 'TEMP_BUFF', name: 'Tri-Shot', emoji: '🔱', description: '英雄发射3枚弹射物，覆盖相邻行。', data: { heroAttackType: 'TRI_SHOT' } },
+        { type: 'TEMP_BUFF', name: 'Penta-Shot', emoji: '🖐️', description: '英雄发射5枚弹射物，覆盖所有行。', data: { heroAttackType: 'PENTA_SHOT' } },
+        { type: 'TEMP_BUFF', name: 'Seeking Shots', emoji: '🎯', description: '英雄的弹射物现在会追踪敌人。', data: { heroAttackType: 'TRACKING' } },
+        { type: 'TEMP_BUFF', name: 'Focused Energy', emoji: '🧘', description: '终极技能所需能量减少20点。', data: { heroMaxEnergy: -20 } },
+        { type: 'TEMP_BUFF', name: 'Rapid Charge', emoji: '⚡️', description: '终极技能能量充能速度提高50%。', data: { heroEnergyGainRate: 0.5 } },
     ];
     
     // Existing base options
     const baseBuffOptions: Omit<DraftOption, 'id'>[] = [
-        { type: 'TEMP_BUFF', name: 'Hero Overdrive', emoji: '🚀', description: 'Hero attacks 100% faster for this wave.', data: { heroAttackSpeed: 1.0 } },
-        { type: 'TEMP_BUFF', name: 'Battle Cry', emoji: '🗣️', description: 'All units deal +20% damage for this wave.', data: { damage: 0.2 } }
+        { type: 'TEMP_BUFF', name: 'Hero Overdrive', emoji: '🚀', description: '本波次英雄攻击速度提高100%。', data: { heroAttackSpeed: 1.0 } },
+        { type: 'TEMP_BUFF', name: 'Battle Cry', emoji: '🗣️', description: '本波次所有单位伤害提高20%。', data: { damage: 0.2 } }
     ];
 
     const availableOptions: Omit<DraftOption, 'id'>[] = [];
@@ -56,9 +59,9 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
     const unitTemplate = allUnitOptions[Math.floor(Math.random() * allUnitOptions.length)];
     availableOptions.push({
         type: 'TEMP_UNIT',
-        name: `Merc: ${unitTemplate.name}`,
+        name: `雇佣兵: ${unitTemplate.name}`,
         emoji: unitTemplate.emoji || '❓',
-        description: unitTemplate.description || 'Deploys a powerful unit for ONE wave only.',
+        description: unitTemplate.description || '部署一个强大的单位，仅限本波次使用。',
         data: unitTemplate
     });
     
@@ -79,9 +82,9 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
       <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl max-w-4xl w-full border border-gray-700">
         <div className="text-center mb-8">
             <h2 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 animate-pulse">
-                LEVEL UP!
+                升级！
             </h2>
-            <p className="text-gray-400 mt-2">Choose an upgrade to continue the fight</p>
+            <p className="text-gray-400 mt-2">选择一个升级以继续战斗</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -101,14 +104,14 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
 
               <div>
                 <div className={`text-xs font-bold uppercase mb-1 px-2 py-1 rounded inline-block ${opt.type === 'TEMP_UNIT' ? 'bg-blue-900 text-blue-300' : 'bg-orange-900 text-orange-300'}`}>
-                    {opt.type === 'TEMP_UNIT' ? 'MERCENARY' : 'WAVE BUFF'}
+                    {opt.type === 'TEMP_UNIT' ? '雇佣兵' : '波次增益'}
                 </div>
                 <h3 className="text-xl font-bold text-white mb-2">{opt.name}</h3>
                 <p className="text-gray-300 text-sm">{opt.description}</p>
               </div>
 
               <div className="w-full mt-4 py-3 bg-gray-800 rounded group-hover:bg-cyan-600/20 text-xs font-mono text-gray-400 group-hover:text-cyan-400 transition-colors uppercase tracking-widest">
-                 SELECT
+                 选择
               </div>
             </button>
           ))}

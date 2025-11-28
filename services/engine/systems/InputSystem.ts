@@ -1,4 +1,5 @@
 
+
 import { useGameStore } from '../../../store/useGameStore';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../../../constants';
 import { InspectionSystem } from './InspectionSystem';
@@ -30,7 +31,6 @@ export class InputSystem {
 
   private handleMouseDown = (e: MouseEvent) => {
     this.updateMouseCoords(e);
-    // Delegate inspection logic to the InspectionSystem
     this.inspectionSystem.handleMouseClick(this.mouseX, this.mouseY);
     
     const { c, r } = this.getGridPosFromCoords(this.mouseX, this.mouseY);
@@ -38,6 +38,10 @@ export class InputSystem {
       const store = useGameStore.getState();
       const unit = store.gridUnits.find(u => u.row === r && u.col === c);
       if (unit) {
+        if (unit.effects?.trigger_on_move) {
+            store.triggerManualExplosion(unit.id);
+            return;
+        }
         this.dragUnitId = unit.id;
         this.dragStartGrid = { r, c };
       }

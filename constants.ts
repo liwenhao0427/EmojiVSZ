@@ -100,10 +100,3 @@ export const KEYWORD_DEFINITIONS: Record<string, string> = {
   "Pierce": "Goes through enemies.",
   "持续": "Duration of the effect."
 };
-
-export const WEAPON_POOL = [
-  { id: "pistol", name: "Pistol", emoji: '🔫', rarity: 'COMMON', type: 'BULLET', damage: 10, cooldown: 1.0, speed: 20, weaponClass: 'RANGED' },
-  { id: "wand", name: "Wand", emoji: '🪄', rarity: 'RARE', type: 'MAGIC', damage: 15, cooldown: 1.5, speed: 15, weaponClass: 'MAGIC' },
-  { id: "sword", name: "Sword", emoji: '⚔️', rarity: 'COMMON', type: 'MELEE', damage: 20, cooldown: 0.8, speed: 0, weaponClass: 'MELEE' },
-  { id: "turret", name: "Turret", emoji: '📡', rarity: 'EPIC', type: 'ENGINEERING', damage: 8, cooldown: 0.3, speed: 30, weaponClass: 'ENGINEERING' },
-];

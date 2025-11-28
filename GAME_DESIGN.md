@@ -1,246 +1,205 @@
 
-# 键盘侠防线：网格战术 - 游戏设计文档 (v2.1)
+# Keyboard Defense: Grid Tactics - Game Design Document (v3.0)
 
-## 1. 项目概况
+## 1. Project Overview
 
-**核心概念:** 
-这是一款结合了 **网格战术 (Grid Tactics)**、**塔防 (Tower Defense)** 和 **轻度Roguelite** 元素的自动战斗游戏。玩家在一个 5x9 的棋盘上策略性地部署单位，以抵御从屏幕右侧不断涌来的网络“水军”和“喷子”。
+**Core Concept:** 
+A sophisticated hybrid game blending **Grid-based Tower Defense**, **Auto-Battler tactics**, and deep **Roguelite progression** inspired by games like *Brotato*. Players strategically deploy and upgrade a squad of emoji-based units on a 5x9 grid to fend off relentless waves of enemies.
 
-**核心体验:**
-*   **策略布局**: 单位的位置、类型和协同作用是制胜关键。
-*   **即时成长**: 在战斗中通过获得经验值升级，并立即从三个随机选项中选择一个临时增益 (Draft)，为当前波次带来变数。
-*   **波次循环**: 游戏围绕着“战斗 -> 升级 -> 商店 -> 战斗”的核心循环展开，每一波都是新的挑战和机遇。
-*   **视觉风格**: 赛博朋克霓虹风格 + Emoji 角色。
+**Core Experience:**
+*   **Strategic Depth:** Unit placement, synergies between permanent items, and temporary wave buffs create a complex decision space.
+*   **Dual Progression:**
+    1.  **In-Wave (Tactical):** Gain XP during combat to level up, pausing the action to draft powerful, wave-only upgrades.
+    2.  **Permanent (Strategic):** Use gold earned from waves to purchase persistent stat-boosting items and new units from a "Brotato-style" shop.
+*   **Dynamic Pacing:** The core loop of "Combat -> Level Up -> Shop" is enhanced by a PvZ-inspired enemy spawning system, creating waves with distinct rhythms and escalating intensity.
+*   **Visual Style:** A polished cyberpunk/sci-fi aesthetic with glassmorphism UI panels, neon highlights, and expressive emoji characters.
 
-**技术栈:**
-*   **前端**: React 18, Tailwind CSS
-*   **核心引擎**: HTML5 Canvas (`GameEngine.ts`)
-*   **状态管理**: Zustand
-*   **交互**: 鼠标拖拽交换单位位置、点击锁定检视目标。
-
----
-
-## 2. 核心游戏循环
-
-游戏遵循一个清晰的阶段性循环，驱动玩家持续做出决策。
-
-1.  **START (开始阶段)**
-    *   玩家进入游戏，看到开始界面。
-    *   点击“开始”后，游戏初始化，进入第一波战斗准备。
-
-2.  **COMBAT (战斗阶段)**
-    *   敌人从右侧生成并向左进攻。**敌人生成速度会随着波次倒计时减少而加快**。
-    *   我方单位自动索敌并攻击。
-    *   **动态升级**: 在战斗中，通过击杀敌人获得经验值 (XP)。XP 满了会 **立即升级**，此时战斗会 **暂停**，并弹出 **Level Up (选秀) 模态框**。
-    *   玩家做出选择后，获得一个 **仅限当前波次的临时增益**，战斗继续。
-    *   波次有倒计时，倒计时结束或击杀所有敌人则波次胜利。
-    *   如果敌人突破左侧防线，游戏结束。
-
-3.  **SHOP (商店阶段)**
-    *   波次胜利后，进入商店阶段。
-    *   玩家可以使用战斗中获得的金币 (Gold) 购买 **永久单位** 或 **永久属性升级**。
-    *   此阶段，玩家可以随意拖拽单位，调整下一波的阵型。
-    *   准备就绪后，点击“开始下一波”按钮，进入新的战斗阶段。
-
-4.  **GAME OVER (游戏结束)**
-    *   当任何一个敌人单位接触到战场最左侧的防线时触发。
-    *   显示玩家达到的波次数，并提供重新开始的选项。
+**Technical Stack:**
+*   **Frontend:** React, Tailwind CSS
+*   **Core Engine:** HTML5 Canvas (`services/engine/`)
+*   **State Management:** Zustand
+*   **Interaction:** Mouse-driven unit placement (drag-and-drop) and entity inspection (hover/click).
 
 ---
 
-## 3. 战场与单位系统
+## 2. Core Gameplay Loop
 
-### 3.1 战场网格 (Battlefield Grid)
-*   **规格**: 5行 x 9列 的棋盘。
-*   **放置规则**: 每个格子只能放置一个单位。
-*   **单位交换**: 在非战斗阶段 (SHOP)，玩家可以通过鼠标拖拽任意两个单位来交换它们的位置。
+The game is structured around a compelling and repeatable cycle:
 
-### 3.2 单位 (Units)
-单位是玩家的核心战斗力，分为英雄和普通单位。
+1.  **START (Start Phase)**
+    *   The game launches with a polished start screen.
+    *   Clicking "Start Defense" initializes the game state and transitions directly into the first wave of combat.
 
-*   **通用属性**:
-    | 属性 | 说明 |
+2.  **COMBAT (Combat Phase)**
+    *   Enemies spawn from the right side of the screen in pre-determined, paced "sub-waves" (PvZ-style).
+    *   Player units automatically target and attack enemies based on their logic.
+    *   **Dynamic Leveling:** Killing enemies grants XP. When the XP bar fills, the player levels up, which **immediately pauses the combat** and presents a **Level Up Modal** with three random, temporary draft choices.
+    *   After selecting a draft option, the buff is applied, and combat resumes.
+    *   The wave ends when the timer runs out. All surviving enemies are cleared.
+    *   If an enemy reaches the far-left "defense line," the game is over.
+
+3.  **SHOP (Shop Phase)**
+    *   After a successful wave, the game enters the Shop phase.
+    *   A full-screen shop modal appears, offering a selection of permanent items and new units for purchase with gold.
+    *   Players can freely rearrange their units on the grid during this phase.
+    *   Once preparations are complete, the player clicks "START WAVE" to begin the next combat phase.
+
+4.  **GAME OVER (Game Over Phase)**
+    *   Triggered when an enemy crosses the defense line at `x = GRID_OFFSET_X`.
+    *   A screen displays the final wave reached and offers a "Restart" option.
+
+---
+
+## 3. Battlefield & Unit System
+
+### 3.1 Battlefield Grid
+*   **Dimensions:** A 5-row by 9-column grid.
+*   **Placement:** One unit per grid cell.
+*   **Interaction:** During the SHOP phase, units can be freely moved by dragging and dropping to swap their positions. During COMBAT, units are locked in place.
+
+### 3.2 Units
+Units are the player's primary agents for dealing damage and controlling the battlefield.
+
+*   **Common Attributes:**
+    | Attribute | Description |
     | :--- | :--- |
-    | **id** | 唯一标识符。 |
-    | **name, emoji** | 名称和视觉形象。 |
-    | **description** | 单位的背景或玩法描述，显示在检视面板。 |
-    | **type** | 武器类型: `MELEE`, `RANGED`, `MAGIC`, `ENGINEERING`。影响伤害加成。 |
-    | **damage** | 基础攻击力。 |
-    | **range** | 攻击范围 (以 **格子** 为单位显示)。 |
-    | **maxCooldown**| 基础攻击间隔 (秒)。 |
-    | **hp / maxHp**| 生命值。归零后单位死亡。 |
-    | **isDead** | 死亡状态。死亡单位在本波次无法行动，显示为墓碑 (🪦)。 |
-    | **isTemp** | 是否为临时单位 (来自升级奖励)，若是，则在波次结束后消失。 |
-    | **row, col** | 在网格中的位置。 |
-    | **attackType**| **英雄专属**，攻击模式: `LINEAR`, `TRACKING`, `TRI_SHOT`, `PENTA_SHOT`。 |
+    | **id, name, emoji** | Unique identifier, display name, and visual representation. |
+    | **description** | Flavor text and tactical info shown in the Inspector Panel. |
+    | **type** | `MELEE`, `RANGED`, `MAGIC`, `ENGINEERING`. Determines which flat damage bonus applies. |
+    | **damage, maxCooldown** | Base damage and attack interval (in seconds). |
+    | **range** | Attack range in pixels. Displayed to the user in "Grids" for clarity. |
+    | **hp / maxHp**| The unit's health. Reaches zero -> `isDead`. |
+    | **isDead** | Dead units are inactive for the current wave, shown as a gravestone (🪦). |
+    | **isTemp** | If true (from a Draft), the unit is removed after the combat phase ends. |
+    | **row, col** | The unit's position on the grid. |
+    | **attackType**| **Hero-specific.** Attack pattern: `LINEAR`, `TRACKING`, `TRI_SHOT`, `PENTA_SHOT`. |
 
-*   **单位死亡与复活**:
-    *   非临时单位在战斗中死亡后，会在下一波开始前自动复活并恢复满生命值。
-    *   临时单位死亡后或在波次结束后会永久消失。
+*   **Unit Health & Revival:**
+    *   Non-temporary units that die during combat are revived at full health at the start of the next SHOP phase.
+    *   Temporary units are removed permanently if they die or at the end of the wave.
 
-*   **英雄单位 (Keyboard Warrior)**:
-    *   玩家的初始核心单位，不可出售或替换。
-    *   **初始DPS极高**，相当于5个普通单位的输出。
-    *   初始攻击方式为 **`LINEAR` (直线)**。
-    *   拥有 **能量 (Energy)** 条，随时间自动增长。
-    *   能量达到上限时，自动释放终极技能 **"ULTIMATE!"**，对全屏所有敌人造成伤害并施加 **冻结** 效果。
-    *   其 **攻击模式**、**充能速度**、**大招能量上限** 均可通过升级选项进行强化。
+*   **The Hero Unit ("Keyboard Warrior")**
+    *   The player's unique, central unit. Cannot be sold or replaced.
+    *   Starts with high base damage.
+    *   Has an **Energy** bar that fills over time.
+    *   When energy is full, automatically unleashes an **"ULTIMATE!"** ability, damaging all enemies on screen and freezing them temporarily.
+    *   The Hero's `attackType`, energy gain rate, and max energy can be upgraded via Draft options.
 
 ---
 
-## 4. 战斗系统
+## 4. Combat Systems
 
-### 4.1 自动索敌与攻击
-*   **索敌逻辑**:
-    *   **标准单位 (MELEE, RANGED, ENGINEERING)**: 优先攻击 **同一行** 且在射程内的最近敌人。
-    *   **魔法单位 (MAGIC)**: 可以攻击 **全场** 范围内最近的敌人，无视行限制。
-    *   **英雄单位**: 遵循其当前的 **`attackType`** 模式。`TRI_SHOT` 和 `PENTA_SHOT` 会以一个主要目标为基准进行攻击。
-*   **攻击表现**:
-    *   **远程/魔法**: 发射与单位 Emoji 相关的弹丸 (Projectile)。`TRACKING` 模式的弹丸具有追踪能力。
-    *   **近战**: 瞬间对射程内敌人造成伤害。在引擎中表现为发射一个生命周期极短的“刀光”弹丸 (🔪)，并附带 **小幅击退** 效果。
+### 4.1 Targeting & Attack Logic
+*   **Standard Targeting (MELEE, RANGED, ENGINEERING):** Prioritizes the nearest enemy within range on the **same row**.
+*   **Global Targeting (MAGIC):** Targets the nearest enemy within range, **regardless of row**.
+*   **Hero Targeting:** Follows its current `attackType`.
+    *   `LINEAR`: Fires straight ahead on its row.
+    *   `TRACKING`: Fires a homing projectile at the nearest enemy.
+    *   `TRI_SHOT`: Fires projectiles on its own row, and the rows immediately above and below.
+    *   `PENTA_SHOT`: Fires projectiles down all five rows simultaneously.
 
-### 4.2 伤害与攻速计算
-游戏中的最终伤害和攻击速度受多种加成影响，计算公式如下：
+### 4.2 Damage & Cooldown Formulas
+The final combat stats are calculated by combining base values with player stats from items.
 
-*   **最终伤害 (Final Damage)**:
+*   **Final Damage:**
     ```
-    Final Damage = (Unit Base Damage + Class Flat Bonus) * (1 + Player Damage % / 100)
+    FinalDmg = (BaseDmg + FlatBonus) * (1 + DamagePercent) * (1 + TempDmgMult)
     ```
-    *   `Class Flat Bonus`: 来自玩家永久属性 (`meleeDmg`, `rangedDmg` 等)。
-    *   `Player Damage %`: 来自玩家永久属性 (`damagePercent`)。
-    *   **波次临时增益**: 如果存在，会作为额外乘区叠加上去，如 `* (1 + tempDamageMult)`。
+    *   `FlatBonus`: From `meleeDmg`, `rangedDmg`, etc., based on the unit's `type`.
+    *   `DamagePercent`: From `damagePercent` stat.
+    *   `TempDmgMult`: Wave-only buff from a Draft selection.
 
-*   **最终攻击间隔 (Final Cooldown)**:
+*   **Final Cooldown:**
     ```
-    Final Cooldown = Unit Base Cooldown / (1 + Player Attack Speed % / 100)
+    FinalCooldown = BaseCooldown / ((1 + AttackSpeedPercent) * (1 + TempAspdMult))
     ```
-    *   `Player Attack Speed %`: 来自玩家永久属性 (`attackSpeed`)。
-    *   **波次临时增益**: 如果存在，会作为额外乘区叠加上去，如 `* (1 + tempAttackSpeedMult)`。
+    *   `AttackSpeedPercent`: From `attackSpeed` stat.
+    *   `TempAspdMult`: Wave-only buff from a Draft selection.
 
-### 4.3 敌人机制
-*   **AI 行为**:
-    1.  从屏幕右侧随机行生成。
-    2.  沿直线向左移动。
-    3.  若前方同格或近距离有我方单位，则停止移动，并开始周期性攻击该单位。
-    4.  **攻击动作**: 攻击时，敌人会有一个快速向目标 **突刺再返回** 的视觉动画。
-    5.  若移动到屏幕最左侧，触发 **Game Over**。
-*   **属性**:
-    | 属性 | 说明 |
-    | :--- | :--- |
-    | **hp / maxHp**| 生命值。随波次增加而成长 (`hp * (1 + (wave * 0.2))`)。 |
-    | **speed** | 移动速度 (像素/秒)。 |
-    | **damage** | 对我方单位的攻击力。 |
-    | **type** | 类型: `NORMAL`, `ELITE`, `BOSS`。影响其血量、奖励和外观。 |
+### 4.3 Enemy System
+*   **Spawning:**
+    *   At the start of a wave, a full queue of enemies is pre-calculated based on `waves.json` and the player's `enemy_count` stat.
+    *   The wave's duration is divided into 10-second "buckets."
+    *   The total enemy queue is distributed non-uniformly across these buckets, creating a paced rhythm of smaller groups followed by larger hordes (PvZ-style).
+*   **Behavior:**
+    1.  Spawn at a random row off-screen to the right.
+    2.  Move leftwards in a straight line.
+    3.  If a player unit is in melee range, stop moving and initiate attacks.
+    4.  Attacks are visualized with a quick "lunge" animation.
+*   **Visual Scaling:** Enemies have a `scale` attribute. Larger, more dangerous enemies (like Elites and Bosses) are rendered with a larger emoji font size, making them visually intimidating.
 
 ---
 
-## 5. 经济与成长体系
+## 5. Progression & Economy
 
-### 5.1 经验值 (XP) 与升级 (Level Up)
-*   **获取**: 在战斗中击杀敌人会掉落经验值和金币。
-*   **升级流程**:
-    *   玩家拥有一个独立的等级 (`level`) 和经验条 (`xp` / `maxXp`)。
-    *   初始升级所需经验值较低，后续 **线性增长**。
-    *   当 `xp` 达到 `maxXp` 时，等级提升，`xp` 归零，`maxXp` 增加。
-    *   升级会 **立刻暂停当前战斗** 并触发 **选秀 (Draft)**。
-*   **等级重置**: 每一波结束后，玩家等级和经验值会 **重置为 1**，为下一波提供全新的成长机会。
+### 5.1 In-Wave Leveling (Drafting)
+*   **XP Gain:** Killing enemies drops XP orbs (visualized as floating text).
+*   **Level Up:** The player has a level and XP bar that resets each wave. When the bar fills, the game pauses, and the Draft/Level Up modal appears.
+*   **Draft Choices:** The modal offers three random, mutually exclusive choices for the current wave:
+    1.  **Mercenary (Temp Unit):** Adds a powerful temporary unit to an empty grid space. The pool includes dedicated mercs and temporary versions of standard weapon units.
+    2.  **Hero Buff:** Enhances the Hero unit (e.g., changing `attackType`, improving energy stats).
+    3.  **Global Buff:** Affects all units (e.g., "+20% Damage for this wave").
 
-### 5.2 选秀 (Draft / Level Up Reward)
-*   **机制**: 每次升级时，系统会从一个固定的奖励池中随机生成三个 **独特且互斥** 的选项供玩家选择。
-*   **奖励类型**:
-    1.  **临时单位 (Mercenary)**: 获得一个单位，但它只在本波次生效。**所有商店中的武器都有可能作为临时单位出现**，此外还有专门的强力佣兵。
-    2.  **英雄专属增益 (Hero Buff)**: 为英雄单位提供一个强大的临时 Buff，如改变攻击模式 (三向射击、追踪弹)，或强化大招 (降低能量消耗、加快充能)。
-    3.  **全局增益 (Global Buff)**: 为所有我方单位提供一个临时 Buff，如“全体伤害+20%”。
-*   **设计目的**: 鼓励玩家根据当前战局和阵型，做出灵活的短期战术决策。
-
-### 5.3 商店 (Shop)
-*   **商品**: 商店提供4个随机生成的商品，分为两类：
-    1.  **武器 (Weapon)**: 购买后直接在战场空格上生成一个对应的 **永久单位**。
-    2.  **道具 (Item)**: 购买后为玩家提供一个 **永久的全局属性加成**。
-*   **商店机制**:
-    *   **购买**: 消耗金币购买商品。如果购买武器时战场已满，会提示“GRID FULL!”。
-    *   **刷新 (Reroll)**: 消耗金币刷新所有未锁定的商品。刷新成本随次数增加。
-    *   **锁定 (Lock)**: 点击商品上的锁图标，可以保留该商品，刷新时不会被替换。
-*   **稀有度**: 商品和单位具有稀有度 (`COMMON`, `RARE`, `EPIC`, `LEGENDARY`)，影响其强度和价格。
+### 5.2 Permanent Progression (Shop)
+*   **Gold:** The primary currency, earned by killing enemies.
+*   **Shop Interface:** A full-screen interface available between waves. It displays 4 randomly generated items for sale.
+*   **Item Types:**
+    1.  **Weapons:** Purchase to add a new, permanent unit to an empty grid space.
+    2.  **Items (Brotato-style):** Purchase to gain a permanent, passive buff to player stats (`PlayerStats`). These are the primary way to scale power across waves.
+*   **Shop Mechanics:**
+    *   **Reroll:** Pay an increasing amount of gold to refresh the shop's offerings.
+    *   **Lock:** Toggle a lock on items to prevent them from being rerolled.
 
 ---
 
-## 6. 内容库
+## 6. Content Library (Examples)
 
-### 6.1 我方单位 (Units)
+### 6.1 Units
 
-| 名称 | Emoji | 类型 | 稀有度 | 基础伤害 | 基础冷却 | 特性 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Keyboard Warrior** | 🦸‍♂️ | MAGIC | - | 25 | 1.0s | 英雄，初始高伤线性攻击，可升级。 |
-| **Militia** | 🔫 | RANGED | - | 8 | 1.5s | 初始单位，可靠的远程输出。 |
-| **Pistol** | 🔫 | RANGED | COMMON | 10 | 1.0s | 商店购买，标准远程单位。 |
-| **Wand** | 🪄 | MAGIC | RARE | 15 | 1.5s | 发射追踪弹，无视行限制。 |
-| **Sword** | ⚔️ | MELEE | COMMON | 20 | 0.8s | 近战单位，有击退效果。 |
-| **Turret** | 📡 | ENGINEERING | EPIC | 8 | 0.3s | 攻速极快的工程单位。 |
-| **Cannon (Merc)**| 💣 | ENGINEERING | - | 50 | 2.5s | 临时单位，高伤害AOE。 |
-| **Sniper Bot (Merc)**| 🔭 | RANGED | - | 100 | 4.0s | 临时单位，超高伤害和射程。 |
-| **Berzerker (Merc)**| 👺 | MELEE | - | 40 | 0.5s | 临时单位，极速近战攻击。 |
+| Name | Emoji | Type | Rarity | Role / Special Trait |
+| :--- | :--- | :--- | :--- | :--- |
+| **Keyboard Warrior**| 🦸‍♂️ | MAGIC | - | Player's Hero. Has an ultimate ability and upgradable attack patterns. |
+| **Militia** | 🔫 | RANGED | - | The starting default unit. |
+| **Sword** | ⚔️ | MELEE | COMMON | Basic melee unit with knockback. |
+| **Wand** | 🪄 | MAGIC | RARE | Fires tracking projectiles with global range. |
+| **Turret** | 📡 | ENGINEERING | EPIC | Extremely high fire rate, low damage per shot. |
+| **Berzerker** | 👺 | MELEE | - | Mercenary unit with very fast melee attacks. |
 
-### 6.2 商店道具 (Items)
+### 6.2 Shop Items (Brotato-style)
 
-| 名称 | 稀有度 | 效果描述 |
+| Name | Tier | Effect Example |
 | :--- | :--- | :--- |
-| **Coffee** | COMMON | +10% 攻击速度 (`attackSpeed`) |
-| **Dumbbell** | COMMON | +5% 伤害 (`damagePercent`) |
-| **Scope** | RARE | +10% 拾取范围 (`pickupRange`) |
-| **Lucky Charm**| EPIC | +20 幸运 (`luck`) |
+| **Gentle Alien** | 1 | +5% Damage, but +5% Enemy Count. |
+| **Coupon** | 1 | -5% Shop Prices. |
+| **Piggy Bank** | 2 | Gain interest on your gold at the start of a wave. |
+| **Glass Cannon** | 3 | +25% Damage. |
+| **Vigilante Ring**| 3 | +3% Damage at the end of each wave (stacks infinitely). |
+| **Ricochet** | 4 | Projectiles bounce +1 time, -35% Damage. |
 
-### 6.3 敌人 (Enemies)
+### 6.3 Enemies
 
-| 名称 | Emoji | 类型 | 基础HP | 速度 | 伤害 | 特性 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Troll** | 🤡 | NORMAL | 30 | 40 | 5 | 标准杂兵。 |
-| **Hater** | 😡 | NORMAL | 60 | 30 | 10 | 血量更高。 |
-| **Bot** | 🤖 | ELITE | 120 | 20 | 15 | 肉盾型精英怪，奖励更丰厚。 |
-| **Boss** | 👹 | BOSS | 1000 | 15 | 50 | 最终波次的巨大威胁。 |
+| Name | Emoji | Type | Scale | Behavior / Special Trait |
+| :--- | :--- | :--- | :--- | :--- |
+| **Fly** | 🦟 | NORMAL | 0.6 | Very fast but very low health. |
+| **Bruiser** | 🦍 | NORMAL | 1.5 | Slow, tanky, and hits hard. |
+| **Looter** | 💰 | SPECIAL | 1.2 | Flees instead of fighting. Drops a large amount of gold if killed. |
+| **Rhino** | 🦏 | ELITE | 2.0 | A massive threat with extremely high health and damage. |
+| **Predator** | 👹 | BOSS | 3.0 | The final wave boss with immense health. |
 
-### 6.4 波次配置 (Wave Configuration)
-
-| 波次 | 持续时间 | 初始间隔 | 敌人类型 |
-| :--- | :--- | :--- | :--- |
-| 1 | 30s | 2.5s | `troll` |
-| 2 | 35s | 2.0s | `troll`, `hater` |
-| 3 | 40s | 1.8s | `troll`, `hater`, `bot` |
-| 4 | 45s | 1.2s | `hater`, `bot` |
-| 5 | 60s | 0.8s | `troll`, `hater`, `bot`, `boss` |
-*注: 敌人的实际生成间隔会随着倒计时减少而动态缩短。*
+### 6.4 Wave Structure
+Waves are defined in `data/waves.ts`. Each wave has a `duration`, a `totalCount` of enemies (which is modified by player stats), and a `composition` defining the weighted mix of enemy types. Some waves have flags like `HORDE`, `ELITE`, or `BOSS` to signify special events.
 
 ---
 
-## 7. UI / UX 设计
+## 7. UI / UX
 
-*   **HUD (抬头显示器)**:
-    *   **顶部**: 居中显示当前波次和倒计时。左侧为玩家等级、经验条和金币。右侧为可展开的玩家全局属性面板。
-    *   **动态反馈**: 倒计时小于10秒时会变红并闪烁。
-
-*   **检视面板 (Inspector Panel)**:
-    *   位于屏幕右上角。
-    *   **悬停 (Hover)**: 鼠标悬停在任何单位或敌人上时，面板会显示其详细信息。
-    *   **锁定 (Click)**: 单击一个实体可以锁定检视面板，使其信息持续显示，方便观察其状态变化。再次单击或单击空白处可解锁。
-    *   **详细数据**: 面板不仅显示最终数值，还将通过 **工具提示 (Tooltip)** 展示伤害和冷却时间的 **计算公式** (例如 `Base: 10, Bonus: +5, Multiplier: x1.20`)。**射程会以“格子”为单位显示**，便于玩家理解。
-
-*   **模态框 (Modals)**:
-    *   **Level Up / Draft**: 设计为三选一卡片，清晰展示奖励类型、名称和效果。
-    *   **Shop**: 界面常驻，但在非商店阶段可最小化，避免遮挡战斗画面。
-    *   **Start / Game Over**: 提供清晰的入口和结束反馈。
-
-*   **视觉反馈**:
-    *   单位受击时会有白色闪烁 (`hitFlash`)。
-    *   敌人攻击时有突刺动画。
-    *   伤害和治疗以浮动文字形式在实体上方显示。
-    *   英雄释放大招时有全屏视觉提示。
-
----
-
-## 8. 技术设计与文件结构
-
-*   **`GameEngine.ts`**: 游戏的核心，负责所有 Canvas 的渲染和实时战斗逻辑。它与状态管理器解耦，通过回调函数与 React 层通信。
-*   **`useGameStore.ts`**: 使用 Zustand 管理所有全局状态，包括玩家属性、单位网格布局、游戏阶段等。是驱动游戏逻辑的“单一数据源”。
-*   **`App.tsx`**: 作为顶层协调器，根据 `useGameStore` 中的游戏阶段 (`phase`) 来渲染不同的UI组件 (如 `Shop`, `LevelUpModal`)，并控制 `GameEngine` 的启动与停止。
-*   **`components/`**: 包含所有可复用的 React UI 组件。
-*   **`types.ts` & `constants.ts`**: 分别定义了所有数据结构和游戏的核心配置数据，便于维护和调整平衡。
+*   **HUD:** A clean, non-intrusive top bar shows Level/XP, Gold, Wave number, and the wave Timer. A pop-out menu on the right details all active stat bonuses from items.
+*   **Inspector Panel:** A context-aware panel on the top-right.
+    *   **Hover:** Displays real-time stats of any unit or enemy.
+    *   **Click-to-Lock:** Clicking an entity pins its details to the panel for continuous monitoring.
+    *   **Stat Breakdowns:** Tooltips on stats like Damage and Cooldown show the complete calculation (`Base + Bonus * Multiplier`).
+*   **Visual Feedback:**
+    *   **Hit Flash:** Entities flash white when taking damage.
+    *   **Floating Text:** Damage numbers, XP gains, and gold gains appear as floating text.
+    *   **Selection Indicator:** A dashed, rotating circle appears around the inspected entity.
+    *   **Hero Ultimate:** A large "ULTIMATE!" text flash and visual screen effect.

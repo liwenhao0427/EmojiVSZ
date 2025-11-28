@@ -1,9 +1,12 @@
 
+
+
 import { create } from 'zustand';
-import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, AmmoItem, InspectableEntity, BrotatoItem } from '../types';
+import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS, TEMP_UNIT_POOL } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 import { ITEMS_DATA } from '../data/items';
+import { UNIT_DATA } from '../data/units';
 
 // A mapping from item stat keys to player stat keys
 const STAT_KEY_MAP: Record<string, string> = {
@@ -28,17 +31,20 @@ interface GameStore {
   setPhase: (phase: GamePhase) => void;
   initGame: () => void;
   moveUnit: (unitId: string, targetRow: number, targetCol: number) => void;
-  addUnit: (item: AmmoItem | Partial<Unit>) => boolean;
-  moveAmmo: (fromId: string, toId: string) => void;
+  addUnit: (item: UnitData | Partial<Unit>) => boolean;
   applyDraft: (option: DraftOption) => void;
   setInspectedEntity: (entity: InspectableEntity) => void;
   buyBrotatoItem: (item: BrotatoItem) => void;
+  moveAmmo: (activeId: string, overId: string) => void;
+  triggerManualExplosion: (unitId: string) => void;
+
 
   // Engine Sync Actions
   damageUnit: (unitId: string, amount: number) => void;
   updateHeroEnergy: (amount: number) => void;
   startNextWave: () => void;
   resetWaveState: () => void;
+  addGold: (amount: number) => void;
 }
 
 const calculateFinalStats = (ownedItems: Record<string, number>, allItems: BrotatoItem[], currentStats: PlayerStats): PlayerStats => {
@@ -87,6 +93,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setPhase: (phase) => set({ phase }),
   
   setInspectedEntity: (entity) => set({ inspectedEntity: entity }),
+  
+  addGold: (amount) => set(state => ({ stats: { ...state.stats, gold: state.stats.gold + amount }})),
 
   initGame: () => {
     const heroUnit = { 
@@ -98,23 +106,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     
     const starters: Unit[] = [heroUnit];
-    for (let r = 0; r < GRID_ROWS; r++) {
-      if (r === 2) continue;
-      starters.push({
-        id: uuidv4(),
-        name: 'Militia',
-        emoji: '🔫',
-        description: 'A basic ranged defender. Reliable but not exceptional.',
-        type: 'RANGED',
-        damage: 8,
-        range: 2000, 
-        cooldown: 0,
-        maxCooldown: 1.5,
-        hp: 60,
-        maxHp: 60,
-        row: r,
-        col: 0
-      });
+    const fistData = UNIT_DATA['fist'];
+    if (fistData) {
+        starters.push({
+            id: uuidv4(),
+            name: fistData.name,
+            emoji: fistData.emoji,
+            description: fistData.desc,
+            type: fistData.type,
+            damage: fistData.damage,
+            range: fistData.range,
+            cooldown: 0,
+            maxCooldown: fistData.cd,
+            hp: fistData.maxHp,
+            maxHp: fistData.maxHp,
+            row: 1,
+            col: 0,
+            effects: fistData.effect,
+            attackPattern: fistData.attackPattern
+        });
     }
 
     set({
@@ -132,31 +142,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
     for (let c = 0; c < GRID_COLS; c++) {
       for (let r = 0; r < GRID_ROWS; r++) {
         if (!units.find(u => u.row === r && u.col === c)) {
-          const unitType = 'weaponClass' in data ? data.weaponClass : (data.type || 'RANGED');
-          const unitMaxCooldown = 'cooldown' in data && typeof data.cooldown === 'number' 
-            ? data.cooldown 
-            : ((data as Partial<Unit>).maxCooldown || 1.0);
 
           const newUnit: Unit = {
             id: uuidv4(),
             name: data.name || 'Unit',
             emoji: data.emoji || '📦',
-            type: unitType,
+            type: data.type || 'RANGED',
             damage: data.damage || 10,
-            range: 1200,
+            range: data.range || 1200,
             cooldown: 0,
-            maxCooldown: unitMaxCooldown,
-            hp: 100,
-            maxHp: 100,
+            // 修复：将 `data` 转换为 `Partial<Unit>` 类型以访问 `maxCooldown` 属性，因为 `UnitData` 类型中不存在此属性。
+            maxCooldown: 'cd' in data && typeof data.cd === 'number' ? data.cd : ((data as Partial<Unit>).maxCooldown || 1.0),
+            hp: data.maxHp || ('hp' in data && typeof data.hp === 'number' ? data.hp : 100),
+            maxHp: data.maxHp || 100,
             row: r,
             col: c,
-            isTemp: (data as any).isTemp || false,
-            ...data as any
+            description: 'desc' in data ? data.desc : data.description,
+            isTemp: 'isTemporary' in data ? !!data.isTemporary : ('isTemp' in data ? !!data.isTemp : false),
+            effects: 'effect' in data ? data.effect : ('effects' in data ? data.effects || {} : {}),
+            attackPattern: 'attackPattern' in data ? data.attackPattern : 'SHOOT',
+            projectileEmoji: 'projectileEmoji' in data ? data.projectileEmoji : undefined,
+            state: 'IDLE',
+            armingTimer: ('effect' in data && data.effect?.mine_arm_time) ? data.effect.mine_arm_time : 0,
+            // 修复：将 `data` 转换为 `Partial<Unit>` 类型以访问 `maxCooldown` 属性，因为 `UnitData` 类型中不存在此属性。
+            specialEffectTimer: ('cd' in data && typeof data.cd === 'number' ? data.cd : (data as Partial<Unit>).maxCooldown) || 0,
           };
-          
-          if ('weaponClass' in data) {
-            newUnit.type = (data as AmmoItem).weaponClass;
-            newUnit.maxCooldown = (data as AmmoItem).cooldown;
+
+          if (newUnit.effects?.mine_arm_time) {
+            newUnit.state = 'ARMING';
           }
 
           set({ gridUnits: [...units, newUnit] });
@@ -182,6 +195,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ownedItems: newOwnedItems,
         stats: newStats
       };
+    });
+  },
+
+  moveAmmo: (activeId: string, overId: string) => {
+    if (activeId === overId) return;
+
+    set(state => {
+        const { ammoState } = state;
+        const newAmmoState = JSON.parse(JSON.stringify(ammoState));
+
+        let activeContainer: string | undefined;
+        let overContainer: string | undefined;
+        let activeIndex = -1;
+        let overIndex = -1;
+        let activeItem: AmmoItem | undefined;
+
+        for (const containerId in newAmmoState) {
+            const index = newAmmoState[containerId].findIndex(item => item.id === activeId);
+            if (index !== -1) {
+                activeContainer = containerId;
+                activeIndex = index;
+                activeItem = newAmmoState[containerId][index];
+                break;
+            }
+        }
+
+        for (const containerId in newAmmoState) {
+            const index = newAmmoState[containerId].findIndex(item => item.id === overId);
+            if (index !== -1) {
+                overContainer = containerId;
+                overIndex = index;
+                break;
+            }
+        }
+        
+        if (!overContainer && newAmmoState[overId]) {
+          overContainer = overId;
+          overIndex = newAmmoState[overId].length;
+        }
+        
+        if (!activeItem || !activeContainer || !overContainer) {
+            return {};
+        }
+        
+        newAmmoState[activeContainer].splice(activeIndex, 1);
+        newAmmoState[overContainer].splice(overIndex, 0, activeItem);
+
+        return { ammoState: newAmmoState };
     });
   },
 
@@ -211,16 +272,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  moveAmmo: (fromId, toId) => { /* Deprecated */ },
-
   damageUnit: (unitId, amount) => {
     set((state) => {
       const units = state.gridUnits.map(u => {
         if (u.id !== unitId) return u;
+        
+        if (u.effects?.explode_on_hit) {
+            return { ...u, hp: 0, isDead: true };
+        }
+
         const newHp = u.hp - amount;
-        return { ...u, hp: newHp, isDead: newHp <= 0 };
+        return { ...u, hp: newHp, isDead: newHp <= 0, hitFlash: 0.2 };
       });
       return { gridUnits: units };
+    });
+  },
+
+  triggerManualExplosion: (unitId) => {
+    set((state) => {
+        const units = state.gridUnits.map(u => {
+            if (u.id === unitId && u.effects?.trigger_on_move) {
+                return { ...u, hp: 0, isDead: true };
+            }
+            return u;
+        });
+        return { gridUnits: units };
     });
   },
 
@@ -252,10 +328,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resetWaveState: () => {
     set(state => {
       const nextUnits = state.gridUnits
-        .filter(u => !u.isTemp)
+        .filter(u => !u.isTemp && !u.isDead) 
         .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
       
-      // Recalculate stats to remove any temporary wave-based buffs if they existed
       const nextStats = calculateFinalStats(state.ownedItems, state.allItems, state.stats);
 
       nextStats.tempDamageMult = 0;
@@ -277,33 +352,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const nextState: Partial<Pick<GameStore, 'gridUnits' | 'stats'>> = {}; 
 
       if (option.type === 'TEMP_UNIT') {
-        const units = [...state.gridUnits];
-        const data = option.data as Partial<Unit>;
-        let placed = false;
-        for (let c = 0; c < GRID_COLS; c++) {
-          for (let r = 0; r < GRID_ROWS; r++) {
-            if (!units.find(u => u.row === r && u.col === c)) {
-              units.push({
-                id: uuidv4(),
-                name: data.name || 'Merc',
-                emoji: data.emoji || '🤠',
-                type: data.type || 'RANGED',
-                damage: data.damage || 20,
-                range: data.range || 1200,
-                cooldown: 0,
-                maxCooldown: data.maxCooldown || 1.0,
-                hp: data.hp || 100,
-                maxHp: data.maxHp || 100,
-                row: r, col: c,
-                isTemp: true
-              });
-              placed = true;
-              break;
-            }
-          }
-          if (placed) break;
-        }
-        nextState.gridUnits = units;
+        get().addUnit({ ...option.data, isTemp: true });
       } else if (option.type === 'TEMP_BUFF') {
         const buff = option.data as any;
         const nextStats = { ...state.stats };

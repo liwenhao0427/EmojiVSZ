@@ -1,3 +1,4 @@
+
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -133,6 +134,8 @@ export class EnemySystem implements System {
             name: typeData.id,
             attackState: 'IDLE',
             attackProgress: 0,
+            slowTimer: 0,
+            slowMultiplier: 1,
           });
         }
       }
@@ -154,6 +157,12 @@ export class EnemySystem implements System {
         e.frozen -= dt;
         return;
       }
+
+      let currentSpeed = e.speed;
+      if (e.slowTimer && e.slowTimer > 0) {
+          e.slowTimer -= dt;
+          currentSpeed *= (e.slowMultiplier || 1);
+      }
       
       if (e.attackState === 'ATTACKING') {
         e.attackProgress! += dt * 3.0;
@@ -163,7 +172,7 @@ export class EnemySystem implements System {
         }
       }
 
-      e.x -= e.speed * dt;
+      e.x -= currentSpeed * dt;
 
       if (e.x < 0) {
         callbacks.onGameOver?.();
@@ -185,7 +194,7 @@ export class EnemySystem implements System {
           e.attackState = 'ATTACKING';
           e.attackProgress = 0;
         }
-        e.x += e.speed * dt;
+        e.x += currentSpeed * dt; // Stand still by moving back
       }
     });
     

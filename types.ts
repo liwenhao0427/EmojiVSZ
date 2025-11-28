@@ -1,6 +1,5 @@
 
 
-
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
 export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -37,6 +36,23 @@ export interface Unit {
 
   // New property for hero attack patterns
   attackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT';
+  attackPattern?: 'SHOOT' | 'THRUST' | 'SWING' | 'STREAM' | 'NONE';
+  projectileEmoji?: string;
+
+  // --- New properties for PvZ/Brotato mechanics ---
+  // For Potato Mine
+  state?: 'IDLE' | 'ARMING' | 'READY';
+  armingTimer?: number;
+  
+  // For Sunflower
+  specialEffectTimer?: number;
+  
+  // For attack animations
+  attackState?: 'IDLE' | 'ATTACKING';
+  attackProgress?: number;
+  
+  // To store raw data for effects
+  effects?: Record<string, any>;
 }
 
 export interface PlayerStats {
@@ -142,16 +158,24 @@ export interface Enemy extends Entity {
   // New properties for attack animation
   attackState?: 'IDLE' | 'ATTACKING';
   attackProgress?: number;
+  // For slow effect
+  slowTimer?: number;
+  slowMultiplier?: number;
 }
 
 export interface Projectile extends Entity {
   vx: number;
   vy: number;
   damage: number;
-  emoji: string;
+  emoji?: string;
   type: 'LINEAR' | 'ARC' | 'TRACKING';
   targetId?: number; 
   originType: WeaponClass;
+  life?: number; // for stream projectiles
+  hitEnemies?: number[]; // for piercing/stream
+  spawnY?: number; // for sine wave of stream
+  // For special effects like slow
+  effects?: Record<string, any>;
 }
 
 export interface FloatingText {
@@ -195,10 +219,35 @@ export interface BrotatoItem {
   max?: number;
 }
 
+// Data format for the new units.json
+export interface UnitData {
+  id: string;
+  name: string;
+  emoji: string;
+  type: WeaponClass;
+  attackPattern: 'SHOOT' | 'THRUST' | 'SWING' | 'STREAM' | 'NONE';
+  price: number;
+  damage: number;
+  cd: number;
+  range: number;
+  maxHp: number;
+  desc: string;
+  isTemporary?: boolean;
+  effect?: Record<string, any>;
+  projectileEmoji?: string;
+  // Optional raw stats
+  knockback?: number;
+  crit?: number;
+  critMult?: number;
+  projectiles?: number;
+  pierce?: number;
+}
+
+
 export interface ShopItem {
   id: string;
-  type: 'WEAPON' | 'ITEM';
-  data: AmmoItem | BrotatoItem;
+  type: 'UNIT' | 'ITEM';
+  data: UnitData | BrotatoItem;
   price: number;
   locked: boolean;
   bought: boolean;
