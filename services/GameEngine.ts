@@ -1,4 +1,5 @@
 
+
 import { Unit, Enemy, Projectile, FloatingText, GamePhase, PlayerStats, AmmoBayState } from '../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG, ENEMY_TYPES } from '../constants';
 import { useGameStore } from '../store/useGameStore';
@@ -8,6 +9,7 @@ interface EngineCallbacks {
     onGainLoot?: (xp: number, gold: number) => void;
     onWaveEnd?: () => void;
     onLootGoblinKill?: () => void;
+    onTimeUpdate?: (timeLeft: number) => void;
 }
 
 // Internal visual state for smoothing animations
@@ -15,9 +17,10 @@ interface VisualUnit {
     x: number;
     y: number;
     scale: number;
+    hitFlash: number;
 }
 
-// Internal Loot interface (added per optimization request)
+// Internal Loot interface
 interface Loot {
     id: number;
     x: number;
@@ -41,7 +44,7 @@ export class GameEngine {
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
   private floatingTexts: FloatingText[] = [];
-  private loot: Loot[] = []; // Added for batch rendering demo
+  private loot: Loot[] = [];
   
   // Visual State Map (Separates Logic from Rendering)
   private visualUnits: Map<string, VisualUnit> = new Map();
@@ -55,7 +58,9 @@ export class GameEngine {
   private mouseY: number = 0;
   private unitCooldowns: Map<string, number> = new Map();
 
+  // Callbacks & Throttling
   private callbacks?: EngineCallbacks;
+  private lastTimerUpdate: number = 0;
 
   constructor(canvas: HTMLCanvasElement, stats?: PlayerStats, callbacks?: EngineCallbacks) {
     this.canvas = canvas;
@@ -85,7 +90,7 @@ export class GameEngine {
     this.enemies = [];
     this.projectiles = [];
     this.floatingTexts = [];
-    this.loot = []; // Clear loot
+    this.loot = []; 
     this.unitCooldowns.clear();
     
     this.waveTime = 0;
@@ -100,8 +105,8 @@ export class GameEngine {
   public updateStats(stats: PlayerStats) { /* Sync if needed */ }
 
   public updateMouse(x: number, y: number) {
-      // External mouse update if needed (mostly handled by internal listeners now)
-      // But we keep this if parent component pushes updates
+      // Handled by internal listeners, but kept for interface compatibility
+      // We update internal mouseX/Y directly in handleMouseMove
   }
 
   public resize(width: number, height: number) {
@@ -123,13 +128,13 @@ export class GameEngine {
     this.lastTime = timestamp;
     const safeDt = Math.min(dt, 0.1);
 
-    this.update(safeDt);
+    this.update(safeDt, timestamp);
     this.draw();
 
     this.animationId = requestAnimationFrame(this.loop);
   };
 
-  private update(dt: number) {
+  private update(dt: number, timestamp: number) {
     const store = useGameStore.getState();
     
     // 1. Visual Interpolation (Runs in all phases for smooth drag)
@@ -146,15 +151,22 @@ export class GameEngine {
     this.updateLoot(dt); // Optimized Loot Logic
     this.updateFloatingText(dt);
 
+    const waveConfig = WAVE_CONFIG.find(w => w.wave === store.stats.wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
+    const duration = waveConfig ? waveConfig.duration : 30;
+    const timeLeft = Math.max(0, duration - this.waveTime);
+
+    // Throttled Timer Update (Prevent React flooding)
+    if (timestamp - this.lastTimerUpdate > 1000) {
+        this.callbacks?.onTimeUpdate?.(Math.ceil(timeLeft));
+        this.lastTimerUpdate = timestamp;
+    }
+
     // End Conditions
     if (this.enemies.some(e => e.x < 0)) {
         store.setPhase(GamePhase.GAME_OVER);
         this.stop();
         return;
     }
-    
-    const waveConfig = WAVE_CONFIG.find(w => w.wave === store.stats.wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
-    const duration = waveConfig ? waveConfig.duration : 30;
 
     if (this.waveTime > duration && this.enemies.length === 0) {
         store.resetWaveState(); 
@@ -167,44 +179,41 @@ export class GameEngine {
 
   // --- Priority 2: Visual Interpolation ("iOS Style") ---
   private updateGridVisuals(dt: number, units: Unit[]) {
-      const LERP_FACTOR = 1 - Math.pow(0.001, dt); // Framerate independent lerp
-      
-      // Mark seen IDs to cleanup old visuals
+      const LERP_FACTOR = 1 - Math.pow(0.001, dt); 
       const seenIds = new Set<string>();
 
       units.forEach(u => {
           seenIds.add(u.id);
           
           if (!this.visualUnits.has(u.id)) {
-              // Init at correct position
               this.visualUnits.set(u.id, {
                   x: GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE/2,
                   y: GRID_OFFSET_Y + u.row * CELL_SIZE + CELL_SIZE/2,
-                  scale: 1
+                  scale: 1,
+                  hitFlash: 0
               });
           }
 
           const vis = this.visualUnits.get(u.id)!;
+          
+          // Flash Decay
+          if (vis.hitFlash > 0) vis.hitFlash -= dt;
+
           const isDragging = this.dragUnitId === u.id;
 
           if (isDragging) {
-              // Direct control, no lerp on position, Lerp on scale
               vis.x = this.mouseX;
               vis.y = this.mouseY;
-              vis.scale = vis.scale + (1.15 - vis.scale) * LERP_FACTOR; // Pump up effect
+              vis.scale = vis.scale + (1.15 - vis.scale) * LERP_FACTOR;
           } else {
-              // Target Grid Position
               const targetX = GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE/2;
               const targetY = GRID_OFFSET_Y + u.row * CELL_SIZE + CELL_SIZE/2;
-              
-              // Smooth Glide
               vis.x += (targetX - vis.x) * LERP_FACTOR;
               vis.y += (targetY - vis.y) * LERP_FACTOR;
               vis.scale += (1.0 - vis.scale) * LERP_FACTOR;
           }
       });
 
-      // Garbage collection for removed units
       for (const id of this.visualUnits.keys()) {
           if (!seenIds.has(id)) {
               this.visualUnits.delete(id);
@@ -212,36 +221,37 @@ export class GameEngine {
       }
   }
 
-  // --- Priority 1: Optimized Loot Logic (Callback Batching) ---
+  // --- Priority 1: Optimized Loot Logic + Fix Auto-Loot ---
   private updateLoot(dt: number) {
-      // NOTE: This assumes loot is spawned by enemies. Since spawn logic wasn't in original file,
-      // I'm focusing on the *update* logic optimization requested.
-      
       let totalXp = 0;
       let totalGold = 0;
-      const playerX = GRID_OFFSET_X; // Simplified player collection point (left side)
-      const playerY = CANVAS_HEIGHT / 2;
-      const range = 200; // Magnet range
+      
+      // Auto-Loot Target: Mouse Position (or fall back to center if 0,0)
+      const targetX = (this.mouseX === 0 && this.mouseY === 0) ? CANVAS_WIDTH/2 : this.mouseX;
+      const targetY = (this.mouseX === 0 && this.mouseY === 0) ? CANVAS_HEIGHT/2 : this.mouseY;
+      const range = 250; // Pickup Range
 
       this.loot.forEach(l => {
           if (l.collected) return;
 
-          // Simple physics
+          // Physics
           l.x += l.vx * dt;
           l.y += l.vy * dt;
-          l.vx *= 0.95; // Friction
+          l.vx *= 0.95;
           l.vy *= 0.95;
 
-          // Magnet Logic
-          const dx = playerX - l.x;
-          const dy = playerY - l.y;
+          // Magnet Logic (Fix: Use mouse position)
+          const dx = targetX - l.x;
+          const dy = targetY - l.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
 
           if (dist < range) {
-              l.x += (dx / dist) * 500 * dt;
-              l.y += (dy / dist) * 500 * dt;
+              // Accelerate towards mouse
+              const speed = 800; // Fast acceleration
+              l.vx += (dx / dist) * speed * dt;
+              l.vy += (dy / dist) * speed * dt;
               
-              if (dist < 30) {
+              if (dist < 40) {
                   l.collected = true;
                   if (l.type === 'XP') totalXp += l.value;
                   else totalGold += l.value;
@@ -251,13 +261,12 @@ export class GameEngine {
 
       this.loot = this.loot.filter(l => !l.collected);
 
-      // BATCH UPDATE: Only call React callback once per frame
+      // Throttled State Update
       if (totalXp > 0 || totalGold > 0) {
           this.callbacks?.onGainLoot?.(totalXp, totalGold);
       }
   }
 
-  // --- Spawning & Combat ---
   private spawnEnemies(dt: number, wave: number) {
       const config = WAVE_CONFIG.find(w => w.wave === wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
       if (!config) return;
@@ -285,7 +294,8 @@ export class GameEngine {
                   row: row,
                   attackTimer: 0,
                   isAttacking: false,
-                  frozen: 0
+                  frozen: 0,
+                  hitFlash: 0
               });
           }
       }
@@ -294,7 +304,7 @@ export class GameEngine {
   private updateUnits(dt: number, units: Unit[]) {
       const store = useGameStore.getState();
       units.forEach(u => {
-          if (u.isDead || this.dragUnitId === u.id) return; // Disable combat while dragging
+          if (u.isDead || this.dragUnitId === u.id) return;
 
           if (u.isHero) {
               store.updateHeroEnergy(5 * dt);
@@ -310,10 +320,7 @@ export class GameEngine {
               return;
           }
 
-          // Targeting logic using VISUAL position for more accuracy? No, Stick to grid for consistency.
-          // Using Logic Coordinates
           let validEnemies = this.enemies.filter(e => e.row === u.row && e.x > (GRID_OFFSET_X + u.col * CELL_SIZE));
-          
           if (u.type === 'MAGIC' || u.range > 1500) validEnemies = this.enemies;
 
           const unitX = GRID_OFFSET_X + (u.col * CELL_SIZE) + CELL_SIZE/2;
@@ -332,6 +339,7 @@ export class GameEngine {
       this.enemies.forEach(e => {
           e.hp -= 50;
           e.frozen = 3.0;
+          e.hitFlash = 0.5;
           this.floatingTexts.push({ x: e.x, y: e.y, text: "-50", color: 'cyan', life: 1, velocity: {x:0, y:-20}, scale: 1.5 });
           if (e.hp <= 0) this.killEnemy(e);
       });
@@ -343,7 +351,8 @@ export class GameEngine {
 
       if (u.type === 'MELEE') {
           target.hp -= damage;
-          target.x += 30;
+          target.x += 30; // Knockback
+          target.hitFlash = 0.2; // Visual flash
           this.addText(target.x, target.y, `-${Math.round(damage)}`, 'white');
           if (target.hp <= 0) this.killEnemy(target);
           return;
@@ -366,6 +375,8 @@ export class GameEngine {
       const store = useGameStore.getState();
       
       this.enemies.forEach(e => {
+          if (e.hitFlash && e.hitFlash > 0) e.hitFlash -= dt;
+
           if (e.frozen > 0) {
               e.frozen -= dt;
               return;
@@ -380,6 +391,10 @@ export class GameEngine {
               e.attackTimer -= dt;
               if (e.attackTimer <= 0) {
                   store.damageUnit(unitInCell.id, e.damage);
+                  // Visual Flash for Unit
+                  const vis = this.visualUnits.get(unitInCell.id);
+                  if (vis) vis.hitFlash = 0.2;
+                  
                   this.addText(e.x - 20, e.y, "CRUNCH", 'red');
                   e.attackTimer = 1.0;
               }
@@ -407,6 +422,7 @@ export class GameEngine {
           
           if (target) {
               target.hp -= p.damage;
+              target.hitFlash = 0.2; // Visual flash
               this.addText(target.x, target.y, `-${Math.round(p.damage)}`, 'yellow');
               if (target.hp <= 0) this.killEnemy(target);
               p.markedForDeletion = true;
@@ -418,7 +434,6 @@ export class GameEngine {
 
   private killEnemy(e: Enemy) {
       e.markedForDeletion = true;
-      // Drop Loot Demo
       for(let i=0; i<3; i++) {
           this.loot.push({
               id: Math.random(),
@@ -448,6 +463,9 @@ export class GameEngine {
 
   // --- Rendering ---
   private draw() {
+    // Force Alpha Reset
+    this.ctx.globalAlpha = 1.0; 
+    
     // Clear
     this.ctx.fillStyle = '#0f172a';
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -455,31 +473,22 @@ export class GameEngine {
     // Draw Grid
     this.drawGrid();
 
-    // Draw Units - using VISUAL Coordinates
+    // Draw Units
     const store = useGameStore.getState();
     const activeUnits = store.gridUnits.filter(u => u.id !== this.dragUnitId);
     const draggingUnit = store.gridUnits.find(u => u.id === this.dragUnitId);
 
-    // 1. Draw Static/Animating Units
     activeUnits.forEach(u => this.drawUnit(u));
-
-    // 2. Draw Enemies
     this.drawEnemies();
-
-    // 3. Draw Projectiles
     this.drawProjectiles();
-
-    // 4. Draw Loot (Priority 1: Batch Rendering)
     this.drawLootBatched();
 
-    // 5. Draw Dragged Unit (Top Z-Index)
     if (draggingUnit) this.drawUnit(draggingUnit);
-
-    // 6. Draw Floating Texts
     this.drawFloatingTexts();
   }
 
   private drawGrid() {
+    this.ctx.lineWidth = 1;
     for (let r=0; r<GRID_ROWS; r++) {
         for (let c=0; c<GRID_COLS; c++) {
             const x = GRID_OFFSET_X + c * CELL_SIZE;
@@ -493,7 +502,7 @@ export class GameEngine {
     }
   }
 
-  // Draw a single unit using its visual state
+  // --- Visual Ghosting Fix: Use source-atop instead of globalAlpha ---
   private drawUnit(u: Unit) {
       const vis = this.visualUnits.get(u.id);
       if (!vis) return;
@@ -505,7 +514,6 @@ export class GameEngine {
       this.ctx.scale(scale, scale);
 
       if (u.id === this.dragUnitId) {
-          // Shadow for lifted unit
           this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
           this.ctx.shadowBlur = 20;
           this.ctx.shadowOffsetY = 10;
@@ -513,22 +521,31 @@ export class GameEngine {
 
       if (u.isDead) {
         this.ctx.font = '50px Arial';
-        this.ctx.globalAlpha = 0.5;
+        this.ctx.globalAlpha = 0.5; // explicit alpha for dead
         this.ctx.fillText('🪦', 0, 0);
+        this.ctx.globalAlpha = 1.0; // RESTORE!
       } else {
         this.ctx.font = '60px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
+        
+        // Main Emoji
         this.ctx.fillText(u.emoji, 0, 0);
 
-        // Health Bar (Relative to unit center 0,0)
+        // Hit Flash Overlay
+        if (vis.hitFlash > 0) {
+            this.ctx.globalCompositeOperation = 'source-atop';
+            this.ctx.fillStyle = `rgba(255, 255, 255, 0.5)`;
+            this.ctx.fillText(u.emoji, 0, 0);
+            this.ctx.globalCompositeOperation = 'source-over';
+        }
+
+        // Health Bar
         const barWidth = 60;
         const barHeight = 6;
         const hpPct = u.hp / u.maxHp;
         
-        // Don't scale the UI bars as much as the unit
         this.ctx.scale(1/scale, 1/scale); 
-
         const barX = -barWidth / 2;
         const barY = -40;
 
@@ -550,6 +567,8 @@ export class GameEngine {
 
   private drawEnemies() {
       this.enemies.forEach(e => {
+        this.ctx.save(); // Isolate context for each enemy to be safe with translation/effects if needed, but here simple fillText is fine.
+        
         this.ctx.font = '50px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -561,12 +580,23 @@ export class GameEngine {
             this.ctx.shadowBlur = 0;
         }
         
+        // Draw Enemy
         this.ctx.fillText(e.emoji, e.x, e.y);
+
+        // Hit Flash Logic
+        if (e.hitFlash && e.hitFlash > 0) {
+            this.ctx.globalCompositeOperation = 'source-atop';
+            this.ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            this.ctx.fillText(e.emoji, e.x, e.y);
+            this.ctx.globalCompositeOperation = 'source-over';
+        }
+        
         this.ctx.shadowBlur = 0;
         
+        // HP Bar
         const barWidth = 50;
         const barHeight = 5;
-        const hpPct = e.hp / e.maxHp;
+        const hpPct = Math.max(0, e.hp / e.maxHp);
         const barX = e.x - (barWidth / 2);
         const barY = e.y - 45;
 
@@ -575,25 +605,29 @@ export class GameEngine {
         
         this.ctx.fillStyle = 'red';
         this.ctx.fillRect(barX, barY, barWidth * hpPct, barHeight);
+
+        this.ctx.restore();
       });
   }
 
-  // Priority 1: Batch Rendering Logic
+  // --- Performance Fix: STRICT Batch Rendering for Loot ---
   private drawLootBatched() {
       if (this.loot.length === 0) return;
 
       this.ctx.save();
-      // Set expensive state ONCE
+      // Set expensive state ONCE outside the loop
       this.ctx.shadowColor = 'gold';
       this.ctx.shadowBlur = 10; 
-      this.ctx.fillStyle = '#fcd34d'; // Amber-300
+      this.ctx.fillStyle = '#fcd34d'; 
 
       this.ctx.beginPath();
-      this.loot.forEach(l => {
-          this.ctx.moveTo(l.x, l.y);
+      // Only geometric operations inside loop
+      for (const l of this.loot) {
+          // Move to start of arc to avoid connecting lines
+          this.ctx.moveTo(l.x + 5, l.y); 
           this.ctx.arc(l.x, l.y, 5, 0, Math.PI * 2);
-      });
-      this.ctx.fill();
+      }
+      this.ctx.fill(); // Single draw call
       
       this.ctx.restore();
   }
@@ -616,8 +650,9 @@ export class GameEngine {
       });
   }
 
-  // --- Input Handlers (Interaction Upgrade) ---
+  // --- Input Handlers ---
   private handleMouseDown = (e: MouseEvent) => {
+      this.updateMouseCoords(e);
       const { c, r } = this.getGridPos(e);
 
       if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
@@ -625,16 +660,12 @@ export class GameEngine {
           const unit = store.gridUnits.find(u => u.row === r && u.col === c);
           if (unit) {
               this.dragUnitId = unit.id;
-              // Immediate visual update to prevent jump
               const vis = this.visualUnits.get(unit.id);
               if (vis) {
                   vis.scale = 1.15;
-                  // We don't snap X/Y immediately here to avoid mouse-center jump, 
-                  // handled in next update loop via mouse coords
               }
           }
       }
-      this.updateMouseCoords(e);
   };
 
   private handleMouseMove = (e: MouseEvent) => {
@@ -644,16 +675,11 @@ export class GameEngine {
           this.canvas.style.cursor = 'grabbing';
           const { c, r } = this.getGridPos(e);
 
-          // "Live Swap" Logic
           if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
               const store = useGameStore.getState();
               const unit = store.gridUnits.find(u => u.id === this.dragUnitId);
               
               if (unit && (unit.row !== r || unit.col !== c)) {
-                  // This triggers logical swap in store.
-                  // The 'other' unit gets a new logical position.
-                  // 'updateGridVisuals' will see that new logical position and LERP the other unit there.
-                  // The dragged unit ignores the logical change visually because 'dragUnitId' is set.
                   store.moveUnit(this.dragUnitId, r, c);
               }
           }

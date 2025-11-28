@@ -1,4 +1,5 @@
 
+
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
 export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -26,6 +27,7 @@ export interface Unit {
   // State
   isTemp?: boolean; // If true, removed at end of wave (Mercenary)
   isDead?: boolean; // If true, inactive until next wave
+  hitFlash?: number; // Visual flash timer
   
   // Grid Position (0-4 Row, 0-8 Col)
   row: number;
@@ -111,6 +113,7 @@ export interface Enemy extends Entity {
   attackTimer: number; // Time until next attack
   isAttacking: boolean; // Visual state
   frozen: number; // Time remaining frozen
+  hitFlash?: number; // Visual flash timer
 }
 
 export interface Projectile extends Entity {

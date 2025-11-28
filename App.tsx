@@ -1,5 +1,6 @@
 
-import React, { useEffect, useRef } from 'react';
+
+import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/GameEngine';
 import { StartScreen } from './components/StartScreen';
 import { DraftModal } from './components/DraftModal';
@@ -14,6 +15,7 @@ export default function App() {
   const { phase, initGame, stats, startNextWave } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
 
   // Initial load
   useEffect(() => {
@@ -22,7 +24,13 @@ export default function App() {
 
   useEffect(() => {
     if (canvasRef.current && !engineRef.current) {
-      engineRef.current = new GameEngine(canvasRef.current);
+      engineRef.current = new GameEngine(
+        canvasRef.current,
+        undefined,
+        {
+          onTimeUpdate: (t) => setTimeLeft(t)
+        }
+      );
     }
     
     // We keep the engine running during SHOP and DRAFT phases so the grid continues to render 
@@ -40,11 +48,6 @@ export default function App() {
 
   const handleStartGame = () => {
     startNextWave(); // Wave 0 -> 1, Phase -> COMBAT
-  };
-
-  const handleShopAction = (type: 'WEAPON' | 'ITEM', data: any) => {
-      // Logic for buying could be moved to store, but for now simple state update
-      // This part assumes we might want to update store from here
   };
 
   return (
@@ -65,7 +68,7 @@ export default function App() {
         {/* HUD Overlay */}
         {(phase === GamePhase.COMBAT || phase === GamePhase.SHOP) && (
           <>
-            <HUD stats={stats} waveTime={0} currentWave={stats.wave} />
+            <HUD stats={stats} waveTime={timeLeft} currentWave={stats.wave} />
             
             {/* Moved Drag Hint to Bottom Left to avoid UI overlap */}
             <div className="absolute bottom-4 left-4 pointer-events-none z-10">
@@ -86,7 +89,7 @@ export default function App() {
                 stats={stats} 
                 currentWave={stats.wave}
                 onNextWave={startNextWave}
-                onBuyWeapon={(w) => { /* Add to AmmoBay/Grid logic if needed, but grid is separate currently. Assume shop just adds to inventory? Current logic implies grid. */ }}
+                onBuyWeapon={(w) => { /* Add to AmmoBay/Grid logic if needed */ }}
                 onBuyItem={(i) => { /* Update stats logic */ }}
                 updateGold={(amount) => { useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold + amount } })) }}
             />
