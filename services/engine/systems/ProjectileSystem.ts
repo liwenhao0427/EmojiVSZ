@@ -1,5 +1,4 @@
 
-
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -86,5 +85,22 @@ export class ProjectileSystem implements System {
 
     this.floatingTextSystem.addText(gameState, e.x, e.y - 20, `+${xp} XP`, 'cyan');
     this.floatingTextSystem.addText(gameState, e.x, e.y - 50, `+${gold} G`, 'yellow');
+
+    // Cyberball logic
+    const store = useGameStore.getState();
+    const chainChance = store.stats.chain_death_dmg_chance || 0;
+    if (Math.random() * 100 < chainChance) {
+      const otherEnemies = gameState.enemies.filter(enemy => !enemy.markedForDeletion && enemy.id !== e.id);
+      if (otherEnemies.length > 0) {
+        const target = otherEnemies[Math.floor(Math.random() * otherEnemies.length)];
+        const chainDamage = Math.round(e.maxHp * 0.25);
+        target.hp -= chainDamage;
+        target.hitFlash = 0.2;
+        this.floatingTextSystem.addText(gameState, target.x, target.y, `-${chainDamage}`, 'magenta');
+        if (target.hp <= 0) {
+          this.killEnemy(target, gameState, callbacks);
+        }
+      }
+    }
   }
 }

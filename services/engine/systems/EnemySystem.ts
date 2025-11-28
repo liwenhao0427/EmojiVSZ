@@ -174,27 +174,30 @@ export class EnemySystem implements System {
 
       e.x -= currentSpeed * dt;
 
-      if (e.x < 0) {
+      if (e.x < GRID_OFFSET_X) { // Changed from 0 to GRID_OFFSET_X for defense line
         callbacks.onGameOver?.();
         store.setPhase(GamePhase.GAME_OVER);
         return; 
       }
 
-      const unitInCell = store.gridUnits.find(u => 
-        !u.isDead && u.row === e.row && 
-        Math.abs(e.x - (GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE / 2)) < (CELL_SIZE / 2 + e.radius)
-      );
+      // Collision and attacking logic
+      if (e.name !== 'fly') { // Flying units ignore collision
+        const unitInCell = store.gridUnits.find(u => 
+          !u.isDead && u.row === e.row && 
+          Math.abs(e.x - (GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE / 2)) < (CELL_SIZE / 2 + e.radius)
+        );
 
-      if (unitInCell) {
-        e.attackTimer -= dt;
-        if (e.attackTimer <= 0) {
-          store.damageUnit(unitInCell.id, e.damage);
-          callbacks.onUnitDamaged?.(unitInCell.id);
-          e.attackTimer = 1.0;
-          e.attackState = 'ATTACKING';
-          e.attackProgress = 0;
+        if (unitInCell) {
+          e.attackTimer -= dt;
+          if (e.attackTimer <= 0) {
+            store.damageUnit(unitInCell.id, e.damage);
+            callbacks.onUnitDamaged?.(unitInCell.id);
+            e.attackTimer = 1.0;
+            e.attackState = 'ATTACKING';
+            e.attackProgress = 0;
+          }
+          e.x += currentSpeed * dt; // Stand still by moving back
         }
-        e.x += currentSpeed * dt; // Stand still by moving back
       }
     });
     

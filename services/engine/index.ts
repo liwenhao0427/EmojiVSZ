@@ -84,6 +84,7 @@ export class GameEngine {
   }
 
   public startWave(duration: number, wave: number) {
+    this.lastTime = performance.now(); // FIX: Reset timer to prevent massive DT on wave start
     this.gameState.reset();
     this.gameState.waveTime = duration > 0 ? duration : 30;
     this.gameState.waveDuration = this.gameState.waveTime;

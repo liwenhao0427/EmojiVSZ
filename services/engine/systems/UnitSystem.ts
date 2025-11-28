@@ -1,5 +1,4 @@
 
-
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -172,6 +171,26 @@ export class UnitSystem implements System {
     const xp = e.type === 'BOSS' ? 50 : e.type === 'ELITE' ? 20 : 10;
     const gold = e.type === 'BOSS' ? 20 : e.type === 'ELITE' ? 10 : 5;
     callbacks.onGainLoot?.(xp, gold);
+
+    callbacks.onAddFloatingText?.(gameState, `+${xp} XP`, 'cyan', e.x, e.y - 20);
+    callbacks.onAddFloatingText?.(gameState, `+${gold} G`, 'yellow', e.x, e.y - 50);
+
+    // Cyberball logic
+    const store = useGameStore.getState();
+    const chainChance = store.stats.chain_death_dmg_chance || 0;
+    if (Math.random() * 100 < chainChance) {
+      const otherEnemies = gameState.enemies.filter(enemy => !enemy.markedForDeletion && enemy.id !== e.id);
+      if (otherEnemies.length > 0) {
+        const target = otherEnemies[Math.floor(Math.random() * otherEnemies.length)];
+        const chainDamage = Math.round(e.maxHp * 0.25);
+        target.hp -= chainDamage;
+        target.hitFlash = 0.2;
+        callbacks.onAddFloatingText?.(gameState, `-${chainDamage}`, 'magenta', target.x, target.y);
+        if (target.hp <= 0) {
+          this.killEnemy(target, gameState, callbacks);
+        }
+      }
+    }
   }
 
   private triggerUltimate(hero: Unit, gameState: GameState, callbacks: EngineCallbacks) {

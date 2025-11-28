@@ -1,6 +1,4 @@
 
-
-
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS, TEMP_UNIT_POOL } from '../constants';
@@ -12,7 +10,8 @@ import { UNIT_DATA } from '../data/units';
 const STAT_KEY_MAP: Record<string, string> = {
   percentDmg: 'damagePercent',
   atkSpeed: 'attackSpeed',
-  crit: 'critChance'
+  crit: 'critChance',
+  shop_discount: 'shopDiscount'
 };
 
 interface GameStore {
@@ -106,24 +105,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     
     const starters: Unit[] = [heroUnit];
-    const fistData = UNIT_DATA['fist'];
-    if (fistData) {
-        starters.push({
-            id: uuidv4(),
-            name: fistData.name,
-            emoji: fistData.emoji,
-            description: fistData.desc,
-            type: fistData.type,
-            damage: fistData.damage,
-            range: fistData.range,
-            cooldown: 0,
-            maxCooldown: fistData.cd,
-            hp: fistData.maxHp,
-            maxHp: fistData.maxHp,
-            row: 1,
-            col: 0,
-            effects: fistData.effect,
-            attackPattern: fistData.attackPattern
+    const peashooterData = UNIT_DATA['peashooter'];
+    if (peashooterData) {
+        const positions = [[0, 1], [1, 1], [3, 1], [4, 1]];
+        positions.forEach(([r, c]) => {
+            starters.push({
+                id: uuidv4(),
+                name: peashooterData.name,
+                emoji: peashooterData.emoji,
+                description: peashooterData.desc,
+                type: peashooterData.type,
+                damage: peashooterData.damage,
+                range: peashooterData.range,
+                cooldown: 0,
+                maxCooldown: peashooterData.cd,
+                hp: peashooterData.maxHp,
+                maxHp: peashooterData.maxHp,
+                row: r,
+                col: c,
+                effects: peashooterData.effect,
+                attackPattern: peashooterData.attackPattern,
+                projectileEmoji: peashooterData.projectileEmoji,
+            });
         });
     }
 
