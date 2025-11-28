@@ -1,4 +1,5 @@
 
+
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem, HeroUpgradeStatus } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS } from '../constants';
@@ -137,7 +138,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       stats: { ...INITIAL_STATS, wave: 1, gold: 10, heroLevel: 1 }, 
       gridUnits: starters,
-      phase: GamePhase.COMBAT,
+      phase: GamePhase.PREPARING_WAVE,
       draftOptions: [],
       inspectedEntity: null,
       ownedItems: {},
@@ -261,15 +262,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (unitIndex === -1) return {};
 
       const unit = units[unitIndex];
-      const targetIndex = units.findIndex(u => u.row === tRow && u.col === tCol && u.id !== unitId && !u.isDead);
+      const targetUnit = units.find(u => u.row === tRow && u.col === tCol && u.id !== unitId);
       
-      if (targetIndex !== -1) {
-        const targetUnit = units[targetIndex];
+      // If target cell is occupied by a dead unit (tombstone), block the move.
+      if (targetUnit && targetUnit.isDead) {
+          return {}; // Invalid move, do nothing.
+      }
+      
+      // If target cell is occupied by a living unit, swap them.
+      if (targetUnit && !targetUnit.isDead) {
         targetUnit.row = unit.row;
         targetUnit.col = unit.col;
         unit.row = tRow;
         unit.col = tCol;
       } else {
+        // If target cell is empty, just move the unit.
         unit.row = tRow;
         unit.col = tCol;
       }
@@ -347,7 +354,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         gridUnits: nextUnits,
         stats: nextStats,
         draftOptions: [], 
-        phase: GamePhase.COMBAT,
+        phase: GamePhase.PREPARING_WAVE,
         heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 } // Reset hero upgrades
       };
     });

@@ -1,4 +1,5 @@
 
+
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -6,6 +7,7 @@ import { useGameStore } from '../../../store/useGameStore';
 import { Unit, Enemy, Projectile, PlayerStats } from '../../../types';
 import { GRID_ROWS, GRID_OFFSET_Y, GRID_OFFSET_X, CELL_SIZE } from '../../../constants';
 import { ProjectileSystem } from './ProjectileSystem'; 
+import { audioManager } from '../../audioManager';
 
 export class UnitSystem implements System {
   private unitCooldowns: Map<string, number> = new Map();
@@ -56,7 +58,7 @@ export class UnitSystem implements System {
         store.updateHeroEnergy(5 * dt);
         const maxEnergy = store.stats.heroMaxEnergy || 100;
         if (u.energy && u.energy >= maxEnergy) {
-          this.triggerUltimate(u, gameState, callbacks);
+          this.triggerUltimate(u, gameState, callbacks, projectileSystem);
           store.updateHeroEnergy(-maxEnergy); 
         }
       }
@@ -69,11 +71,11 @@ export class UnitSystem implements System {
 
       const unitX = GRID_OFFSET_X + (u.col * CELL_SIZE) + CELL_SIZE / 2;
       const unitY = GRID_OFFSET_Y + (u.row * CELL_SIZE) + CELL_SIZE / 2;
-      let validEnemies = gameState.enemies.filter(e => e.row === u.row && e.x > unitX && Math.abs(e.x - unitX) <= u.range);
+      let validEnemies = gameState.enemies.filter(e => e.row === u.row && e.x > unitX && Math.abs(e.x - unitX) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
       
       const isGlobalRange = (u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC' || u.range > 1500;
       if (isGlobalRange) {
-        validEnemies = gameState.enemies.filter(e => Math.hypot(e.x - unitX, e.y - unitY) <= u.range);
+        validEnemies = gameState.enemies.filter(e => Math.hypot(e.x - unitX, e.y - unitY) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
       }
       
       if (validEnemies.length === 0) return;
@@ -84,34 +86,30 @@ export class UnitSystem implements System {
 
       switch (u.attackPattern) {
           case 'THRUST':
-              u.attackState = 'ATTACKING';
-              u.attackProgress = 0;
-              gameState.enemies.forEach(e => {
-                  if (e.row === u.row && e.x > unitX && e.x < unitX + u.range) {
-                      e.hp -= damage;
-                      e.hitFlash = 0.2;
-                      callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'white', e.x, e.y);
-                      if (e.hp <= 0) this.killEnemy(e, gameState, callbacks);
-                  }
-              });
-              break;
           case 'SWING':
               u.attackState = 'ATTACKING';
               u.attackProgress = 0;
-              gameState.enemies.forEach(e => {
-                  const dist = Math.hypot(e.x - unitX, e.y - unitY);
-                  const angle = Math.atan2(e.y - unitY, e.x - unitX);
-                  if (dist <= u.range && Math.abs(angle) < Math.PI / 4) {
-                      e.hp -= damage;
-                      e.hitFlash = 0.2;
-                      callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'white', e.x, e.y);
-                      if (e.hp <= 0) this.killEnemy(e, gameState, callbacks);
-                  }
+              audioManager.play('swing', { volume: 0.3 });
+              
+              const affectedEnemies = u.attackPattern === 'SWING'
+                  ? gameState.enemies.filter(e => {
+                      const dist = Math.hypot(e.x - unitX, e.y - unitY);
+                      const angle = Math.atan2(e.y - unitY, e.x - unitX);
+                      return dist <= u.range && Math.abs(angle) < Math.PI / 4 && (!e.deathTimer || e.deathTimer <= 0);
+                    })
+                  : gameState.enemies.filter(e => e.row === u.row && e.x > unitX && e.x < unitX + u.range && (!e.deathTimer || e.deathTimer <= 0));
+
+              affectedEnemies.forEach(e => {
+                  e.hp -= damage;
+                  e.hitFlash = 0.2;
+                  callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'white', e.x, e.y);
+                  if (e.hp <= 0) this.killEnemy(e, gameState, callbacks);
               });
               break;
           case 'STREAM':
           case 'SHOOT':
           default:
+              audioManager.play('shoot', { volume: 0.2 });
               this.fireProjectile(u, unitX, unitY, target, gameState, projectileSystem);
               break;
       }
@@ -133,7 +131,7 @@ export class UnitSystem implements System {
     
     if (u.state === 'READY' && u.effects?.explode_on_contact) {
         const unitX = GRID_OFFSET_X + (u.col * CELL_SIZE) + CELL_SIZE / 2;
-        const enemyInRange = gameState.enemies.find(e => e.row === u.row && Math.abs(e.x - unitX) <= u.range);
+        const enemyInRange = gameState.enemies.find(e => e.row === u.row && Math.abs(e.x - unitX) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
         if (enemyInRange) {
             this.triggerExplosion(u, gameState, callbacks);
             u.hp = 0;
@@ -148,7 +146,7 @@ export class UnitSystem implements System {
       const damage = this.calculateFinalDamage(u, useGameStore.getState().stats);
       
       gameState.enemies.forEach(e => {
-          if (Math.hypot(e.x - unitX, e.y - unitY) < u.range) {
+          if (Math.hypot(e.x - unitX, e.y - unitY) < u.range && (!e.deathTimer || e.deathTimer <= 0)) {
               e.hp -= damage;
               e.hitFlash = 0.3;
               callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'orange', e.x, e.y);
@@ -171,10 +169,11 @@ export class UnitSystem implements System {
   }
 
   private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
-    if (e.markedForDeletion) return;
-    e.markedForDeletion = true;
+    if (e.markedForDeletion || (e.deathTimer && e.deathTimer > 0)) return;
     
-    // NERFED XP GAINS
+    e.deathTimer = 1.0; // Start 1-second death animation
+    audioManager.play('death', { volume: 0.4 });
+    
     const xp = e.type === 'BOSS' ? 15 : e.type === 'ELITE' ? 7 : 3;
     const gold = e.type === 'BOSS' ? 20 : e.type === 'ELITE' ? 10 : 5;
     
@@ -186,7 +185,7 @@ export class UnitSystem implements System {
     const store = useGameStore.getState();
     const chainChance = store.stats.chain_death_dmg_chance || 0;
     if (Math.random() * 100 < chainChance) {
-      const otherEnemies = gameState.enemies.filter(enemy => !enemy.markedForDeletion && enemy.id !== e.id);
+      const otherEnemies = gameState.enemies.filter(enemy => !enemy.markedForDeletion && (!enemy.deathTimer || enemy.deathTimer <= 0) && enemy.id !== e.id);
       if (otherEnemies.length > 0) {
         const target = otherEnemies[Math.floor(Math.random() * otherEnemies.length)];
         const chainDamage = Math.round(e.maxHp * 0.25);
@@ -200,15 +199,33 @@ export class UnitSystem implements System {
     }
   }
 
-  private triggerUltimate(hero: Unit, gameState: GameState, callbacks: EngineCallbacks) {
-    callbacks.onAddFloatingText?.(gameState, '终极技能!', 'gold', 600, 400);
-    gameState.enemies.forEach(e => {
-      e.hp -= 50;
-      e.frozen = 3.0;
-      e.hitFlash = 0.5;
-      callbacks.onAddFloatingText?.(gameState, '-50', 'cyan', e.x, e.y);
-      if (e.hp <= 0) this.killEnemy(e, gameState, callbacks);
-    });
+  private triggerUltimate(hero: Unit, gameState: GameState, callbacks: EngineCallbacks, projectileSystem?: ProjectileSystem) {
+    callbacks.onAddFloatingText?.(gameState, '终极弹幕!', 'gold', 600, 400);
+
+    if (!projectileSystem) return;
+
+    const unitX = GRID_OFFSET_X + (hero.col * CELL_SIZE) + CELL_SIZE / 2;
+    const unitY = GRID_OFFSET_Y + (hero.row * CELL_SIZE) + CELL_SIZE / 2;
+    const damage = this.calculateFinalDamage(hero, useGameStore.getState().stats);
+
+    // Fire a volley of 10 powerful, piercing projectiles down the hero's lane
+    for (let i = 0; i < 10; i++) {
+        const proj: Omit<Projectile, 'id'> = {
+            x: unitX + i * 5, // Stagger them slightly for a visual "beam" effect
+            y: unitY,
+            vx: 1200, // Faster than normal projectiles
+            vy: 0,
+            damage: damage * 0.5, // Each shot deals 50% of hero's damage
+            emoji: '🌟',
+            radius: 12,
+            markedForDeletion: false,
+            type: 'LINEAR',
+            originType: hero.type,
+            pierce: 3, // Can hit up to 3 enemies
+            hitEnemies: [],
+        };
+        projectileSystem.spawnProjectile(gameState, proj);
+    }
   }
 
   private fireProjectile(u: Unit, x: number, y: number, target: Enemy | undefined, gameState: GameState, projectileSystem?: ProjectileSystem) {
@@ -229,10 +246,11 @@ export class UnitSystem implements System {
       originType: u.type,
       effects: u.effects,
       life: u.attackPattern === 'STREAM' ? 0.75 : undefined,
-      hitEnemies: u.attackPattern === 'STREAM' ? [] : undefined,
+      hitEnemies: [], // Initialize for all projectiles
       spawnY: u.attackPattern === 'STREAM' ? y : undefined,
       bounceCount: u.effects?.bounceCount || 0,
-      chainExplosion: u.effects?.chain_explosion ? true : false
+      chainExplosion: u.effects?.chain_explosion ? true : false,
+      pierce: u.effects?.pierce || 0,
     });
 
     const addProjectile = (base: Omit<Projectile, 'id'>) => {
@@ -255,6 +273,8 @@ export class UnitSystem implements System {
         addProjectile(createBaseProjectile(GRID_OFFSET_Y + (r * CELL_SIZE) + CELL_SIZE/2));
       }
     } else {
+      u.attackState = 'ATTACKING';
+      u.attackProgress = 0;
       addProjectile(createBaseProjectile(y));
     }
   }

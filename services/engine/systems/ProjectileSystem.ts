@@ -1,4 +1,5 @@
 
+
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -8,6 +9,7 @@ import { Enemy, Projectile } from '../../../types';
 import { useGameStore } from '../../../store/useGameStore';
 import { SpatialHashGrid } from '../utils/SpatialHashGrid';
 import { SimpleObjectPool } from '../utils/SimpleObjectPool';
+import { audioManager } from '../../audioManager';
 
 export class ProjectileSystem implements System {
   
@@ -26,13 +28,14 @@ export class ProjectileSystem implements System {
         p.id = Math.random(); 
         p.markedForDeletion = false;
         p.targetId = undefined;
-        p.hitEnemies = undefined;
+        p.hitEnemies = [];
         p.life = undefined;
         p.spawnY = undefined;
         p.emoji = undefined;
         p.effects = undefined;
         p.bounceCount = undefined;
         p.chainExplosion = undefined;
+        p.pierce = undefined;
       }
     );
   }
@@ -52,10 +55,11 @@ export class ProjectileSystem implements System {
     p.originType = props.originType;
     p.effects = props.effects;
     p.life = props.life;
-    p.hitEnemies = props.hitEnemies;
+    p.hitEnemies = []; // Always start with a clean slate
     p.spawnY = props.spawnY;
     p.bounceCount = props.bounceCount;
     p.chainExplosion = props.chainExplosion;
+    p.pierce = props.pierce;
 
     gameState.projectiles.push(p);
   }
@@ -63,27 +67,29 @@ export class ProjectileSystem implements System {
   update(dt: number, gameState: GameState, callbacks: EngineCallbacks) {
     this.grid.clear();
     gameState.enemies.forEach(e => {
-        this.grid.insert({ x: e.x, y: e.y, id: e.id, radius: e.radius });
+        // Only include living enemies in collision detection
+        if (!e.deathTimer || e.deathTimer <= 0) {
+            this.grid.insert({ x: e.x, y: e.y, id: e.id, radius: e.radius });
+        }
     });
 
     gameState.projectiles.forEach(p => {
       if (p.markedForDeletion) return;
 
       if (p.type === 'TRACKING' && p.targetId) {
-        const target = gameState.enemies.find(e => e.id === p.targetId);
+        const target = gameState.enemies.find(e => e.id === p.targetId && (!e.deathTimer || e.deathTimer <= 0));
         if (target) {
           const angle = Math.atan2(target.y - p.y, target.x - p.x);
           p.vx = Math.cos(angle) * 600;
           p.vy = Math.sin(angle) * 600;
         } else {
-            // If target dies, switch to linear or find new target
             p.type = 'LINEAR';
         }
       }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
-      if (p.life) { // Stream projectile logic
+      if (p.life) { // Stream projectile logic (piercing by nature)
           p.life -= dt;
           if (p.life <= 0) {
               p.markedForDeletion = true;
@@ -92,38 +98,36 @@ export class ProjectileSystem implements System {
           if (p.spawnY) { 
               p.y = p.spawnY + Math.sin(p.x / 20) * 10;
           }
-          
-          const potentialTargets = this.grid.retrieve({ x: p.x, y: p.y, radius: p.radius, id: p.id });
-          
-          potentialTargets.forEach(pt => {
-              const e = gameState.enemies.find(enemy => enemy.id === pt.id);
-              if (e && !e.markedForDeletion) {
-                  if (!(p.hitEnemies?.includes(e.id)) && Math.hypot(e.x - p.x, e.y - p.y) < (e.radius + p.radius)) {
-                      this.applyHit(p, e, gameState, callbacks);
-                      if (!p.hitEnemies) p.hitEnemies = [];
-                      p.hitEnemies.push(e.id);
-                  }
-              }
-          });
+      }
 
-      } else { // Standard projectile logic
-          const potentialTargets = this.grid.retrieve({ x: p.x, y: p.y, radius: p.radius, id: p.id });
-          let hit = false;
-          
-          for (const pt of potentialTargets) {
-              const e = gameState.enemies.find(enemy => enemy.id === pt.id);
-              if (e && !e.markedForDeletion) {
-                  if (Math.hypot(e.x - p.x, e.y - p.y) < (e.radius + p.radius)) {
-                      this.applyHit(p, e, gameState, callbacks);
-                      p.markedForDeletion = true;
-                      hit = true;
-                      
-                      // BOUNCE LOGIC
-                      if (p.bounceCount && p.bounceCount > 0) {
-                          this.handleBounce(p, e, gameState);
-                      }
-                      
-                      break; 
+      const potentialTargets = this.grid.retrieve({ x: p.x, y: p.y, radius: p.radius, id: p.id });
+      
+      for (const pt of potentialTargets) {
+          if (p.markedForDeletion) break; // If a non-piercing projectile hits, stop checking
+
+          const e = gameState.enemies.find(enemy => enemy.id === pt.id);
+
+          // Check for valid target and if it has been hit by this projectile before
+          if (e && !e.markedForDeletion && (!e.deathTimer || e.deathTimer <= 0) && !(p.hitEnemies?.includes(e.id))) {
+              if (Math.hypot(e.x - p.x, e.y - p.y) < (e.radius + p.radius)) {
+                  this.applyHit(p, e, gameState, callbacks);
+                  
+                  if (!p.hitEnemies) p.hitEnemies = [];
+                  p.hitEnemies.push(e.id);
+
+                  if (p.life) continue; // Stream projectiles can hit multiple targets per frame
+
+                  if (p.bounceCount && p.bounceCount > 0) {
+                      this.handleBounce(p, e, gameState);
+                      p.markedForDeletion = true; // Bouncing projectile is consumed
+                      break;
+                  }
+                  
+                  if (p.pierce && p.pierce > 0) {
+                      p.pierce--; // Decrement pierce count
+                  } else {
+                      p.markedForDeletion = true; // No more pierce, mark for deletion
+                      break;
                   }
               }
           }
@@ -147,7 +151,7 @@ export class ProjectileSystem implements System {
       let nearestEnemy: Enemy | null = null;
       
       gameState.enemies.forEach(e => {
-          if (e.id !== hitEnemy.id && !e.markedForDeletion) {
+          if (e.id !== hitEnemy.id && !e.markedForDeletion && (!e.deathTimer || e.deathTimer <= 0)) {
               const dist = Math.hypot(e.x - p.x, e.y - p.y);
               if (dist < 500 && dist < nearestDist) {
                   nearestDist = dist;
@@ -183,6 +187,7 @@ export class ProjectileSystem implements System {
   private applyHit(p: Projectile, target: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
       target.hp -= p.damage;
       target.hitFlash = 0.2;
+      audioManager.play('hit', { volume: 0.3 });
       
       if (p.effects?.slow_on_hit) {
           target.slowTimer = 2.0;
@@ -210,7 +215,7 @@ export class ProjectileSystem implements System {
       callbacks.onAddFloatingText?.(gameState, 'BOOM!', 'orange', x, y - 20);
       
       gameState.enemies.forEach(e => {
-          if (!e.markedForDeletion && Math.hypot(e.x - x, e.y - y) <= radius) {
+          if (!e.markedForDeletion && (!e.deathTimer || e.deathTimer <= 0) && Math.hypot(e.x - x, e.y - y) <= radius) {
               e.hp -= damage;
               e.hitFlash = 0.3;
               if (e.hp <= 0) {
@@ -226,8 +231,10 @@ export class ProjectileSystem implements System {
   }
 
   private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
-    if (e.markedForDeletion) return;
-    e.markedForDeletion = true;
+    if (e.markedForDeletion || (e.deathTimer && e.deathTimer > 0)) return;
+    
+    e.deathTimer = 1.0; // Start 1-second death animation
+    audioManager.play('death', { volume: 0.4 });
     
     // NERFED XP
     const isBoss = e.type === 'BOSS';
@@ -244,7 +251,7 @@ export class ProjectileSystem implements System {
     const store = useGameStore.getState();
     const chainChance = store.stats.chain_death_dmg_chance || 0;
     if (Math.random() * 100 < chainChance) {
-      const otherEnemies = gameState.enemies.filter(enemy => !enemy.markedForDeletion && enemy.id !== e.id);
+      const otherEnemies = gameState.enemies.filter(enemy => !enemy.markedForDeletion && (!enemy.deathTimer || enemy.deathTimer <= 0) && enemy.id !== e.id);
       if (otherEnemies.length > 0) {
         const target = otherEnemies[Math.floor(Math.random() * otherEnemies.length)];
         const chainDamage = Math.round(e.maxHp * 0.25);

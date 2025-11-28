@@ -1,4 +1,5 @@
 
+
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -171,6 +172,7 @@ export class EnemySystem implements System {
       attackProgress: 0,
       slowTimer: 0,
       slowMultiplier: 1,
+      deathTimer: 0,
     });
   }
 
@@ -180,6 +182,15 @@ export class EnemySystem implements System {
     
     gameState.enemies.forEach(e => {
       if (e.hitFlash && e.hitFlash > 0) e.hitFlash -= dt;
+
+      // Handle death animation timer
+      if (e.deathTimer && e.deathTimer > 0) {
+        e.deathTimer -= dt;
+        if (e.deathTimer <= 0) {
+          e.markedForDeletion = true;
+        }
+        return; // Don't process movement/attacks for dying enemies
+      }
 
       if (e.frozen > 0) {
         e.frozen -= dt;

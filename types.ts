@@ -1,4 +1,5 @@
 
+
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
 export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -52,6 +53,11 @@ export interface Unit {
   
   // To store raw data for effects
   effects?: Record<string, any>;
+
+  // For Hero Ultimate
+  isUlting?: boolean;
+  ultTimer?: number;
+  ultTickTimer?: number;
 }
 
 export interface HeroUpgradeStatus {
@@ -109,6 +115,7 @@ export interface PlayerStats {
 
 export enum GamePhase {
   START = 'START',
+  PREPARING_WAVE = 'PREPARING_WAVE',
   COMBAT = 'COMBAT',
   DRAFT = 'DRAFT',
   SHOP = 'SHOP',
@@ -129,7 +136,7 @@ export interface DraftOption {
       heroAttackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT' | 'DOUBLE_SHOT';
       heroEnergyGainRate?: number; // As a multiplier, e.g. 0.5 for +50%
       heroMaxEnergy?: number; // As a reduction, e.g., -20
-      upgradePath?: 'multishot' | 'effect' | 'bounce';
+      upgradePath?: 'multishot' | 'effect' | 'bounce' | 'ultimate';
       upgradeLevel?: number;
       extraEffects?: Record<string, any>;
   };
@@ -169,6 +176,10 @@ export interface Enemy extends Entity {
   // For slow effect
   slowTimer?: number;
   slowMultiplier?: number;
+  // For death animation
+  deathTimer?: number;
+  // Knockback
+  knockbackVx?: number;
 }
 
 export interface Projectile extends Entity {
@@ -187,6 +198,7 @@ export interface Projectile extends Entity {
   // Bouncing logic
   bounceCount?: number;
   chainExplosion?: boolean;
+  pierce?: number;
 }
 
 export interface FloatingText {
@@ -226,7 +238,7 @@ export interface BrotatoItem {
   price: number;
   desc: string;
   stats?: Record<string, number>;
-  effect?: Record<string, number>;
+  effect?: Record<string, any>; // Changed to any to support preset upgrades
   max?: number;
 }
 

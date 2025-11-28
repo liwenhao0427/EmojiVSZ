@@ -71,6 +71,15 @@ export class GameEngine {
     };
   }
 
+  // 核心修复：添加手动重置方法，用于在游戏完全重启时调用
+  public reset() {
+    this.stop();
+    this.gameState.reset();
+    this.unitSystem.reset();
+    // 强制执行一次绘制以清除画面上的残留敌人
+    this.renderingSystem.draw(this.gameState, null);
+  }
+
   public start() {
     if (this.isRunning) return;
     this.isRunning = true;
@@ -139,7 +148,7 @@ export class GameEngine {
     
     // Run systems in order
     this.enemySystem.update(dt, this.gameState, this.callbacks);
-    // 关键修改：将 projectileSystem 传递给 unitSystem，以使用对象池
+    // 将 projectileSystem 传递给 unitSystem，以使用对象池
     this.unitSystem.update(dt, this.gameState, this.callbacks, this.projectileSystem);
     this.projectileSystem.update(dt, this.gameState, this.callbacks);
     this.floatingTextSystem.update(dt, this.gameState, this.callbacks);

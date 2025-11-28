@@ -12,6 +12,8 @@ import { WAVE_DATA } from './data/waves';
 import { HUD } from './components/HUD';
 import { InspectorPanel } from './components/InspectorPanel';
 import { InventoryPanel } from './components/InventoryPanel';
+import { audioManager, SOUND_MAP } from './services/audioManager';
+import { PreparingWaveScreen } from './components/PreparingWaveScreen';
 
 export default function App() {
   const { phase, setPhase, initGame, stats, startNextWave, applyDraft, setInspectedEntity, buyBrotatoItem } = useGameStore();
@@ -26,10 +28,11 @@ export default function App() {
 
   // Initial load
   useEffect(() => {
-    // 移除自动 initGame，等待用户点击开始
-    // initGame(); 
+    // 预加载所有音效
+    audioManager.load(SOUND_MAP);
   }, []);
 
+  // Engine Initialization
   useEffect(() => {
     if (canvasRef.current && !engineRef.current) {
       engineRef.current = new GameEngine(
@@ -81,33 +84,55 @@ export default function App() {
       );
     }
     
-    // Engine Control
-    if (phase === GamePhase.COMBAT || phase === GamePhase.SHOP) {
-      if (!showLevelUp) {
-        engineRef.current?.start();
-      }
-    } else {
-      engineRef.current?.stop();
+    return () => {
+        engineRef.current?.cleanup();
+    };
+  }, []);
+
+  // Logic 1: Handle Phase Transitions (Prepare -> Combat)
+  useEffect(() => {
+    if (phase === GamePhase.PREPARING_WAVE) {
+        // Stop engine visual updates during static screens if needed, 
+        // but keeping it stopped ensures we don't have game logic running.
+        // We rely on the PreparingScreen overlay.
+        const timer = setTimeout(() => {
+            setPhase(GamePhase.COMBAT);
+        }, 1200); // Increased slightly for better UX
+        return () => clearTimeout(timer);
     }
-    
-    // Wave Start
+  }, [phase, setPhase]);
+
+  // Logic 2: Engine Start/Stop Control
+  useEffect(() => {
+    if (phase === GamePhase.COMBAT) {
+        audioManager.play('music', { loop: true, volume: 0.2 });
+        if (!showLevelUp) {
+          engineRef.current?.start();
+        }
+    } else {
+        audioManager.stopMusic();
+        engineRef.current?.stop();
+    }
+  }, [phase, showLevelUp]);
+  
+  // Logic 3: Wave Synchronization (The Critical Fix)
+  useEffect(() => {
+    // Only trigger wave start if we are in combat, not leveling up, and the wave number has changed
+    // since the last time we started the engine.
     if (phase === GamePhase.COMBAT && !showLevelUp && waveStartedRef.current !== stats.wave) {
         waveStartedRef.current = stats.wave;
         const config = WAVE_DATA.find(w => w.wave === stats.wave) || WAVE_DATA[WAVE_DATA.length-1];
         engineRef.current?.startWave(config.duration, stats.wave);
     }
-    
-    return () => {
-        // On unmount, ensure engine is cleaned up.
-        // This is more of a safety net for strict mode.
-        // engineRef.current?.cleanup(); 
-    }
-  }, [phase, stats.wave, showLevelUp]);
+  }, [phase, showLevelUp, stats.wave]);
 
   const handleStartGame = () => {
-    engineRef.current?.stop();
-    waveStartedRef.current = 0;
-    initGame();
+    // 关键修复：彻底重置引擎状态，防止上一局的敌人残留导致判定死亡
+    engineRef.current?.reset();
+    
+    waveStartedRef.current = 0; // Reset ref so Logic 3 triggers for Wave 1
+    
+    initGame(); // Reset Zustand Store
     setShowLevelUp(false);
     setInspectedEntity(null);
   };
@@ -119,7 +144,7 @@ export default function App() {
   const handleDraftSelect = (option: DraftOption) => {
       applyDraft(option);
       setShowLevelUp(false);
-      engineRef.current?.start(); // Resume
+      // Engine will auto-resume due to Logic 2
   };
 
   return (
@@ -141,6 +166,8 @@ export default function App() {
         {phase === GamePhase.START && (
             <StartScreen onStart={handleStartGame} />
         )}
+        
+        {phase === GamePhase.PREPARING_WAVE && <PreparingWaveScreen />}
 
         {/* HUD Overlay */}
         {(phase === GamePhase.COMBAT || phase === GamePhase.SHOP) && (

@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { PlayerStats, DraftOption, Unit, WeaponClass, UnitData, HeroUpgradeStatus } from '../types';
 import { Sparkles, Sword, Zap, User, ArrowUpCircle } from 'lucide-react';
@@ -28,14 +29,31 @@ const unitDataToDraftUnit = (w: UnitData): Partial<Unit> => ({
 
 export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) => {
   const [options, setOptions] = React.useState<DraftOption[]>([]);
-  const { heroUpgradeStatus } = useGameStore();
+  const { heroUpgradeStatus, stats } = useGameStore();
 
   const getHeroUpgradeOption = (): DraftOption => {
       // Pick a random path: 0=Multishot, 1=Effect, 2=Bounce
       const roll = Math.random();
-      let option: DraftOption | null = null;
       
       const { multishot, effect, bounce } = heroUpgradeStatus;
+
+      // New Ultimate Upgrade path
+      if (Math.random() < 0.25) { // 25% chance to offer an ultimate upgrade
+           const ultLevel = stats.ult_level || 0;
+           if (ultLevel === 0) return {
+              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⏱️', name: '延时核心', description: '终极技能持续时间 +1s',
+              data: { extraEffects: { ult_duration_bonus: (stats.ult_duration_bonus || 0) + 1, ult_level: 1 }, upgradePath: 'ultimate', upgradeLevel: 1 }
+           };
+           if (ultLevel === 1) return {
+              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⚡', name: '超载核心', description: '终极技能伤害频率 +25%',
+              data: { extraEffects: { ult_tick_rate_bonus: (stats.ult_tick_rate_bonus || 0) + 0.25, ult_level: 2 }, upgradePath: 'ultimate', upgradeLevel: 2 }
+           };
+           if (ultLevel >= 2) return {
+              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '↔️', name: '扩容核心', description: '终极技能影响相邻行',
+              data: { extraEffects: { ult_width_bonus: (stats.ult_width_bonus || 0) + 1, ult_level: (ultLevel + 1) }, upgradePath: 'ultimate', upgradeLevel: ultLevel + 1 }
+           };
+      }
+
 
       // 1. Multishot Path
       if (roll < 0.33) {
@@ -106,6 +124,25 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
     ];
 
     const finalOptions: DraftOption[] = [];
+    const usedHeroUpgrades = new Set<string>();
+
+    const getUniqueHeroUpgrade = (): DraftOption => {
+        let attempts = 0;
+        while(attempts < 10) {
+            const option = getHeroUpgradeOption();
+            // FIX: Use the 'in' operator as a type guard to safely access properties
+            // on the union type `option.data`. This ensures that we only access
+            // `upgradePath` and `upgradeLevel` when they exist on the object.
+            const key = 'upgradePath' in option.data && option.data.upgradePath ? `${option.data.upgradePath}_${option.data.upgradeLevel}` : option.name;
+            if (!usedHeroUpgrades.has(key)) {
+                usedHeroUpgrades.add(key);
+                return option;
+            }
+            attempts++;
+        }
+        // Fallback if we can't find a unique one
+        return { id: uuidv4(), type: 'HERO_UPGRADE', emoji: '💪', name: '英雄力量', description: '英雄伤害 +50%', data: { heroDamage: 0.5 } };
+    };
 
     // Option 1: Mercenary
     const unitTemplate = allUnitOptions[Math.floor(Math.random() * allUnitOptions.length)];
@@ -119,14 +156,18 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
     });
 
     // Option 2: Hero Upgrade
-    finalOptions.push(getHeroUpgradeOption());
+    finalOptions.push(getUniqueHeroUpgrade());
 
-    // Option 3: Temp Buff
-    const buff = baseBuffOptions[Math.floor(Math.random() * baseBuffOptions.length)];
-    finalOptions.push({ ...buff, id: uuidv4() });
-
+    // Option 3: Temp Buff or another Hero Upgrade
+    if (Math.random() > 0.4) {
+        finalOptions.push(getUniqueHeroUpgrade());
+    } else {
+        const buff = baseBuffOptions[Math.floor(Math.random() * baseBuffOptions.length)];
+        finalOptions.push({ ...buff, id: uuidv4() });
+    }
+    
     setOptions(finalOptions);
-  }, [level, heroUpgradeStatus]);
+  }, [level, heroUpgradeStatus, stats]);
 
   return (
     <div className="absolute inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">

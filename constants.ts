@@ -1,4 +1,5 @@
 
+
 import { PlayerStats, Unit, Rarity } from './types';
 
 export const CANVAS_WIDTH = 1200; 
@@ -21,7 +22,7 @@ export const INITIAL_STATS: PlayerStats = {
   heroMaxXp: 50, 
   level: 1,
   xp: 0,
-  maxXp: 150, // Increased initial XP requirement
+  maxXp: 50, // Initial XP requirement lowered
   
   damagePercent: 0,
   attackSpeed: 0,

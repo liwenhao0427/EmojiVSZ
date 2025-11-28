@@ -1,4 +1,5 @@
 
+
 import { GameState } from '../GameState';
 import { Unit, InspectableEntity } from '../../../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../constants';
@@ -13,11 +14,11 @@ interface VisualUnit {
   scale: number;
   hitFlash: number;
   offsetX: number;
+  recoil: number;
 }
 
 export class RenderingSystem {
   private visualUnits: Map<string, VisualUnit> = new Map();
-  // 1. 初始化缓存工具
   private emojiCache: EmojiSpriteCache = new EmojiSpriteCache();
   
   constructor(private ctx: CanvasRenderingContext2D, private inputSystem: InputSystem) {}
@@ -44,6 +45,7 @@ export class RenderingSystem {
           scale: 1,
           hitFlash: 0,
           offsetX: 0,
+          recoil: 0,
         });
       }
 
@@ -53,6 +55,12 @@ export class RenderingSystem {
         u.hitFlash = 0;
       }
       if (vis.hitFlash > 0) vis.hitFlash -= dt;
+
+      // Recoil for ranged units
+      if (u.attackState === 'ATTACKING' && (u.attackPattern === 'SHOOT' || u.attackPattern === 'STREAM')) {
+          vis.recoil = -8;
+      }
+      vis.recoil += (0 - vis.recoil) * LERP_FACTOR * 2; // Faster recoil recovery
 
       const isDragging = this.inputSystem.dragUnitId === u.id;
 
@@ -89,7 +97,6 @@ export class RenderingSystem {
     this.ctx.fillStyle = '#0f172a';
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // 计算当前悬停的网格坐标
     const { c: hoverC, r: hoverR } = this.inputSystem.getGridPosFromCoords(this.inputSystem.mouseX, this.inputSystem.mouseY);
 
     this.drawGrid(hoverC, hoverR);
@@ -98,17 +105,14 @@ export class RenderingSystem {
     const activeUnits = store.gridUnits.filter(u => u.id !== this.inputSystem.dragUnitId);
     const draggingUnit = store.gridUnits.find(u => u.id === this.inputSystem.dragUnitId);
     
-    // 查找当前悬停的单位 (非拖拽中)
     const hoveredUnit = !this.inputSystem.dragUnitId 
         ? activeUnits.find(u => u.col === hoverC && u.row === hoverR && !u.isDead) 
         : null;
 
-    // 绘制攻击范围 (位于单位下方，网格上方)
     if (hoveredUnit) {
         this.drawAttackRange(hoveredUnit);
     }
 
-    // 绘制单位
     activeUnits.forEach(u => {
         const isHovered = u.id === hoveredUnit?.id;
         this.drawUnit(u, isHovered);
@@ -136,7 +140,6 @@ export class RenderingSystem {
 
     this.ctx.save();
 
-    // 呼吸效果
     const time = performance.now() / 1000;
     const alpha = 0.15 + Math.sin(time * 5) * 0.05;
     this.ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
@@ -146,7 +149,6 @@ export class RenderingSystem {
     const isGlobal = (u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC' || u.range > 1500;
 
     if (isGlobal) {
-      // --- 圆形：用于追踪、魔法或全屏攻击 ---
       this.ctx.beginPath();
       this.ctx.arc(x, y, u.range, 0, Math.PI * 2);
       this.ctx.fill();
@@ -158,7 +160,6 @@ export class RenderingSystem {
         this.ctx.fillText("GLOBAL RANGE", x, y - 40);
       }
     } else if (u.isHero && u.attackType === 'TRI_SHOT') {
-      // --- 3行矩形：用于英雄三向射击 ---
       const startRow = Math.max(0, u.row - 1);
       const endRow = Math.min(GRID_ROWS - 1, u.row + 1);
       const rectY = GRID_OFFSET_Y + startRow * CELL_SIZE;
@@ -166,15 +167,12 @@ export class RenderingSystem {
       this.ctx.fillRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
       this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
     } else if (u.isHero && u.attackType === 'PENTA_SHOT') {
-      // --- 5行矩形：用于英雄五向射击 ---
       const rectY = GRID_OFFSET_Y;
       const rectHeight = GRID_ROWS * CELL_SIZE;
       this.ctx.fillRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
       this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
     } else {
-      // --- 单行攻击模式 ---
       if (u.attackPattern === 'SWING') {
-        // 扇形：用于挥砍
         this.ctx.beginPath();
         this.ctx.moveTo(x, y);
         this.ctx.arc(x, y, u.range, -Math.PI / 4, Math.PI / 4);
@@ -182,7 +180,6 @@ export class RenderingSystem {
         this.ctx.fill();
         this.ctx.stroke();
       } else {
-        // 矩形：用于直线射击或突刺
         const rectY = GRID_OFFSET_Y + u.row * CELL_SIZE;
         this.ctx.fillRect(x - CELL_SIZE / 2, rectY, u.range, CELL_SIZE);
         this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, CELL_SIZE);
@@ -199,7 +196,6 @@ export class RenderingSystem {
         const x = GRID_OFFSET_X + c * CELL_SIZE;
         const y = GRID_OFFSET_Y + r * CELL_SIZE;
         
-        // 拖拽高亮 (蓝色)
         if (this.inputSystem.dragUnitId) {
           const { c: dragC, r: dragR } = this.inputSystem.getGridPosFromCoords(this.inputSystem.mouseX, this.inputSystem.mouseY);
           if (dragC === c && dragR === r) {
@@ -207,12 +203,10 @@ export class RenderingSystem {
             this.ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
           }
         }
-        // 鼠标悬停高亮 (白色) - 仅在非拖拽状态下
         else if (hoverC === c && hoverR === r) {
             this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             this.ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
             
-            // 绘制边框高亮
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             this.ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
         }
@@ -234,9 +228,18 @@ export class RenderingSystem {
     const vis = this.visualUnits.get(u.id);
     if (!vis) return;
 
-    const { x, y, scale, offsetX } = vis;
+    const { x, y, scale, offsetX, recoil } = vis;
     this.ctx.save();
-    this.ctx.translate(x + offsetX, y);
+    this.ctx.translate(x + offsetX + recoil, y);
+
+    // Idle animation
+    if (!isHovered && !u.isDead && this.inputSystem.dragUnitId !== u.id) {
+        const time = performance.now() / 1000;
+        const sway = Math.sin(time * 4 + parseInt(u.id, 16));
+        this.ctx.scale(1 + sway * 0.04, 1 - sway * 0.04);
+        this.ctx.rotate(sway * 0.02);
+    }
+    
     this.ctx.scale(scale, scale);
 
     if (u.id === this.inputSystem.dragUnitId) {
@@ -244,7 +247,6 @@ export class RenderingSystem {
       this.ctx.shadowBlur = 20;
       this.ctx.shadowOffsetY = 10;
     } else if (isHovered) {
-      // 单位悬停高亮效果
       this.ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
       this.ctx.shadowBlur = 15;
     }
@@ -266,7 +268,6 @@ export class RenderingSystem {
 
     if (u.isDead) {
       this.ctx.globalAlpha = 0.5;
-      // 墓碑也可以缓存
       this.emojiCache.draw(this.ctx, '🪦', 0, 0, 60);
     } else {
       if (u.isTemp) {
@@ -274,7 +275,6 @@ export class RenderingSystem {
         this.ctx.shadowBlur = 10;
       }
       
-      // 使用缓存绘制单位 Emoji
       this.emojiCache.draw(this.ctx, u.emoji, 0, 0, 60);
       
       this.ctx.globalAlpha = 1.0;
@@ -282,7 +282,6 @@ export class RenderingSystem {
       if (vis.hitFlash > 0) {
         this.ctx.globalCompositeOperation = 'source-atop';
         this.ctx.fillStyle = `rgba(255, 255, 255, 0.7)`;
-        // 闪白效果目前还是用文字绘制遮罩比较方便
         this.ctx.font = '60px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -294,7 +293,10 @@ export class RenderingSystem {
       const barHeight = 6;
       const hpPct = u.hp / u.maxHp;
       
-      this.ctx.scale(1 / scale, 1 / scale);
+      this.ctx.save();
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for HUD elements
+      this.ctx.translate(x + offsetX + recoil, y);
+      
       const barX = -barWidth / 2;
       const barY = -40;
 
@@ -313,6 +315,7 @@ export class RenderingSystem {
         this.ctx.fillStyle = 'cyan';
         this.ctx.fillRect(barX, barY + 80, barWidth * ep, 4);
       }
+      this.ctx.restore();
     }
     this.ctx.restore();
   }
@@ -320,6 +323,21 @@ export class RenderingSystem {
   private drawEnemies(gameState: GameState) {
     gameState.enemies.forEach(e => {
       let drawX = e.x;
+      let drawY = e.y;
+      
+      this.ctx.save();
+      
+      // Handle animations
+      if (e.deathTimer && e.deathTimer > 0) {
+        const deathProgress = 1 - e.deathTimer / 1.0; // 1.0s duration
+        this.ctx.globalAlpha = 1 - deathProgress;
+        drawY -= deathProgress * CELL_SIZE;
+      } else {
+         // Hopping animation for living enemies
+         const hopOffsetY = Math.abs(Math.sin(performance.now() / 200 + e.id)) * 8;
+         drawY -= hopOffsetY;
+      }
+
       if (e.attackState === 'ATTACKING' && e.attackProgress) {
         const lungeDistance = 40;
         const offset = Math.sin(e.attackProgress * Math.PI) * -lungeDistance;
@@ -329,24 +347,18 @@ export class RenderingSystem {
       const typeData = ENEMY_DATA[e.name!];
       const scale = typeData ? typeData.scale : 1.0;
 
-      this.ctx.save();
-      this.ctx.translate(drawX, e.y);
+      this.ctx.translate(drawX, drawY);
       
-      // 替换敌人绘制
       if (e.slowTimer && e.slowTimer > 0) {
-         // 冰冻效果，简单绘制一个底色光圈
          this.ctx.shadowColor = '#67e8f9';
          this.ctx.shadowBlur = 10;
       }
 
-      this.ctx.globalAlpha = 1.0;
-      // 使用缓存绘制敌人，大小计算：50px * scale
       this.emojiCache.draw(this.ctx, e.emoji, 0, 0, 50 * scale);
 
       if (e.hitFlash && e.hitFlash > 0) {
         this.ctx.globalCompositeOperation = 'source-atop';
         this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        // 闪白处理同上
         this.ctx.font = `${50 * scale}px Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -354,15 +366,19 @@ export class RenderingSystem {
         this.ctx.globalCompositeOperation = 'source-over';
       }
       
-      const barWidth = 40 * scale;
-      const barHeight = 5;
-      const hpPct = Math.max(0, e.hp / e.maxHp);
-      const barX = -(barWidth / 2);
-      const barY = - (35 * scale);
-      this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      this.ctx.fillRect(barX, barY, barWidth, barHeight);
-      this.ctx.fillStyle = 'red';
-      this.ctx.fillRect(barX, barY, barWidth * hpPct, barHeight);
+      // Don't draw HP bar for dying enemies
+      if (!e.deathTimer || e.deathTimer <= 0) {
+          const barWidth = 40 * scale;
+          const barHeight = 5;
+          const hpPct = Math.max(0, e.hp / e.maxHp);
+          const barX = -(barWidth / 2);
+          const barY = - (35 * scale);
+          this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          this.ctx.fillRect(barX, barY, barWidth, barHeight);
+          this.ctx.fillStyle = 'red';
+          this.ctx.fillRect(barX, barY, barWidth * hpPct, barHeight);
+      }
+      
       this.ctx.restore();
     });
   }
@@ -420,9 +436,7 @@ export class RenderingSystem {
         this.ctx.rotate(angle);
       }
       
-      // 替换子弹绘制
       if(p.emoji) {
-        // 使用缓存绘制子弹
         this.emojiCache.draw(this.ctx, p.emoji, 0, 0, 24);
       } else {
         this.ctx.fillStyle = 'yellow';
