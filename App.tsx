@@ -27,7 +27,21 @@ export default function App() {
         canvasRef.current,
         undefined,
         {
-          onTimeUpdate: (t) => setTimeLeft(t)
+          onTimeUpdate: (t) => setTimeLeft(t),
+          onGainLoot: (xp, gold) => {
+              useGameStore.getState().gainXp(xp);
+              useGameStore.setState(s => ({ 
+                  stats: { ...s.stats, gold: s.stats.gold + gold } 
+              }));
+          },
+          onDamagePlayer: (amount) => {
+               // Optional: Trigger additional effects or sounds here
+               // Store handles damage logic in some cases, but direct HP updates might be safer here 
+               // if GameEngine calls this strictly for player/base damage.
+               // Currently GameEngine updates damage via store.damageUnit for Grid Units.
+               // If this callback is for "Base HP" (if different from units), handle it.
+               // But assuming this is just a hook for UI/Sound:
+          }
         }
       );
     }

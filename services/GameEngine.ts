@@ -160,8 +160,8 @@ export class GameEngine {
     this.updateUnits(dt, store.gridUnits);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
-    this.updateLoot(dt); // FIX: Hero targeting check inside
-    this.updateFloatingText(dt); // FIX: Cleanup check inside
+    this.updateLoot(dt); 
+    this.updateFloatingText(dt); 
 
     // Throttled Timer Update (Prevent React flooding)
     if (timestamp - this.lastTimerUpdate > 1000) {
@@ -232,7 +232,7 @@ export class GameEngine {
       }
   }
 
-  // --- FIX: Optimized Loot Logic (Target Hero) ---
+  // --- FIX: Optimized Loot Logic (Target Hero or Center) ---
   private updateLoot(dt: number) {
       let totalXp = 0;
       let totalGold = 0;
@@ -240,17 +240,15 @@ export class GameEngine {
       const store = useGameStore.getState();
       const hero = store.gridUnits.find(u => u.isHero && !u.isDead);
       
-      // Get Hero Visual Position
-      let targetX = 0;
-      let targetY = 0;
-      let hasTarget = false;
+      // FIX: Default to screen center if hero is missing
+      let targetX = CANVAS_WIDTH / 2;
+      let targetY = CANVAS_HEIGHT / 2;
 
       if (hero) {
           const vis = this.visualUnits.get(hero.id);
           if (vis) {
               targetX = vis.x;
               targetY = vis.y;
-              hasTarget = true;
           }
       }
 
@@ -263,22 +261,20 @@ export class GameEngine {
           l.vx *= 0.95; // Friction
           l.vy *= 0.95;
 
-          if (hasTarget) {
-              const dx = targetX - l.x;
-              const dy = targetY - l.y;
-              const dist = Math.hypot(dx, dy);
+          const dx = targetX - l.x;
+          const dy = targetY - l.y;
+          const dist = Math.hypot(dx, dy);
 
-              // Magnet Logic
-              if (dist < 1000) { // Global pull
-                  const speed = 1200; // Very fast pull
-                  l.vx += (dx / dist) * speed * dt;
-                  l.vy += (dy / dist) * speed * dt;
-                  
-                  if (dist < 30) {
-                      l.collected = true;
-                      if (l.type === 'XP') totalXp += l.value;
-                      else totalGold += l.value;
-                  }
+          // Magnet Logic (Always pull if reasonably close)
+          if (dist < 1200) { 
+              const speed = 1500; // Very fast pull
+              l.vx += (dx / dist) * speed * dt;
+              l.vy += (dy / dist) * speed * dt;
+              
+              if (dist < 40) {
+                  l.collected = true;
+                  if (l.type === 'XP') totalXp += l.value;
+                  else totalGold += l.value;
               }
           }
       });
@@ -419,6 +415,7 @@ export class GameEngine {
                   if (vis) vis.hitFlash = 0.2;
                   this.addText(e.x - 20, e.y, "CRUNCH", 'red');
                   e.attackTimer = 1.0;
+                  this.callbacks?.onDamagePlayer?.(e.damage);
               }
           } else {
               e.x -= e.speed * dt;
@@ -497,7 +494,7 @@ export class GameEngine {
     const draggingUnit = store.gridUnits.find(u => u.id === this.dragUnitId);
 
     activeUnits.forEach(u => this.drawUnit(u));
-    this.drawEnemies(); // Fixed Draw Logic
+    this.drawEnemies(); 
     this.drawProjectiles();
     this.drawLootBatched();
 
@@ -520,7 +517,7 @@ export class GameEngine {
     }
   }
 
-  // --- FIX: 3-Step Draw for Units (Ghosting Fix) ---
+  // --- FIX: 3-Step Draw for Units (Ghosting Fix + Hit Flash) ---
   private drawUnit(u: Unit) {
       const vis = this.visualUnits.get(u.id);
       if (!vis) return;
@@ -552,11 +549,11 @@ export class GameEngine {
         this.ctx.fillStyle = 'white'; // Prevent color pollution
         this.ctx.fillText(u.emoji, 0, 0);
 
-        // 2. HIT FLASH OVERLAY
+        // 2. HIT FLASH OVERLAY (FIXED)
         if (vis.hitFlash > 0) {
             this.ctx.save();
             this.ctx.globalCompositeOperation = 'source-atop';
-            this.ctx.fillStyle = `rgba(255, 255, 255, 0.6)`;
+            this.ctx.fillStyle = `rgba(255, 255, 255, 0.7)`;
             this.ctx.fillText(u.emoji, 0, 0);
             this.ctx.restore();
             // Reset composite is handled by restore, but explicitly safe:
@@ -588,7 +585,7 @@ export class GameEngine {
       this.ctx.restore();
   }
 
-  // --- FIX: 3-Step Draw for Enemies (Ghosting Fix) ---
+  // --- FIX: 3-Step Draw for Enemies (Ghosting Fix + Hit Flash) ---
   private drawEnemies() {
       this.enemies.forEach(e => {
         this.ctx.save();
@@ -611,11 +608,11 @@ export class GameEngine {
         this.ctx.fillStyle = 'white';
         this.ctx.fillText(e.emoji, 0, 0);
 
-        // 2. HIT FLASH OVERLAY
+        // 2. HIT FLASH OVERLAY (FIXED)
         if (e.hitFlash && e.hitFlash > 0) {
             this.ctx.save();
             this.ctx.globalCompositeOperation = 'source-atop';
-            this.ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
             this.ctx.fillText(e.emoji, 0, 0);
             this.ctx.restore();
             this.ctx.globalCompositeOperation = 'source-over';
@@ -657,12 +654,32 @@ export class GameEngine {
       this.ctx.restore();
   }
 
+  // --- FIX: Explicit Render State Reset for Projectiles ---
   private drawProjectiles() {
       this.projectiles.forEach(p => {
-        this.ctx.font = '30px Arial';
+        this.ctx.save();
+        
+        // 1. Force Reset State
+        this.ctx.globalAlpha = 1.0;
+        this.ctx.globalCompositeOperation = 'source-over';
+        this.ctx.fillStyle = 'white'; 
+        
+        // 2. Position & Rotation
+        this.ctx.translate(p.x, p.y);
+        
+        // Rotate if moving
+        if (p.vx !== 0 || p.vy !== 0) {
+            const angle = Math.atan2(p.vy, p.vx);
+            this.ctx.rotate(angle);
+        }
+
+        // 3. Draw Small Emoji
+        this.ctx.font = '24px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
-        this.ctx.fillText(p.emoji, p.x, p.y);
+        this.ctx.fillText(p.emoji, 0, 0);
+        
+        this.ctx.restore();
       });
   }
 
