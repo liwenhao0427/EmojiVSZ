@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { BrotatoItem } from '../types';
@@ -13,7 +14,7 @@ const ItemTooltip: React.FC<{ item: BrotatoItem }> = ({ item }) => {
   const rarity = TIER_TO_RARITY[item.tier];
   const color = RARITY_COLORS[rarity];
   return (
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 bg-slate-900 border-2 rounded-lg p-3 shadow-2xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: color }}>
+    <div className="absolute bottom-full left-0 mb-2 w-60 bg-slate-900 border-2 rounded-lg p-3 shadow-2xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: color }}>
       <div className="font-bold text-lg" style={{ color }}>{item.name}</div>
       <div className="text-xs font-mono uppercase mb-2" style={{ color }}>等级 {item.tier} - {rarity}</div>
       <p className="text-sm text-gray-300">{item.desc}</p>
@@ -43,7 +44,7 @@ export const InventoryPanel: React.FC = () => {
   }
 
   return (
-    <div className="absolute bottom-4 left-4 glass-panel p-3 rounded-xl z-30 max-w-sm pointer-events-auto animate-in fade-in slide-in-from-bottom duration-300">
+    <div className="absolute bottom-6 left-6 glass-panel p-3 rounded-xl z-30 max-w-sm pointer-events-auto animate-in fade-in slide-in-from-bottom duration-300">
       <h3 className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
         <Briefcase size={14}/> 背包
       </h3>

@@ -1,5 +1,4 @@
 
-
 import { GameState } from '../GameState';
 import { Unit, InspectableEntity } from '../../../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../constants';
@@ -70,6 +69,14 @@ export class RenderingSystem {
           lungeOffset = Math.sin(u.attackProgress * Math.PI) * lungeDistance;
       }
 
+      // ULTIMATE VIBRATION EFFECT
+      let ultShakeX = 0;
+      let ultShakeY = 0;
+      if (u.isUlting) {
+          ultShakeX = (Math.random() - 0.5) * 6;
+          ultShakeY = (Math.random() - 0.5) * 6;
+      }
+
       if (isDragging) {
         vis.x = this.inputSystem.mouseX;
         vis.y = this.inputSystem.mouseY;
@@ -83,6 +90,9 @@ export class RenderingSystem {
         vis.scale += (1.0 - vis.scale) * LERP_FACTOR;
         vis.offsetX += (lungeOffset - vis.offsetX) * LERP_FACTOR;
       }
+      
+      // Apply ult shake to stored visual position temporarily for rendering? 
+      // No, handle it in draw.
     });
 
     for (const id of this.visualUnits.keys()) {
@@ -230,7 +240,16 @@ export class RenderingSystem {
 
     const { x, y, scale, offsetX, recoil } = vis;
     this.ctx.save();
-    this.ctx.translate(x + offsetX + recoil, y);
+    
+    // Ultimate Shake Effect
+    let shakeX = 0;
+    let shakeY = 0;
+    if (u.isUlting) {
+        shakeX = (Math.random() - 0.5) * 6;
+        shakeY = (Math.random() - 0.5) * 6;
+    }
+
+    this.ctx.translate(x + offsetX + recoil + shakeX, y + shakeY);
 
     // Idle animation
     if (!isHovered && !u.isDead && this.inputSystem.dragUnitId !== u.id) {
@@ -249,6 +268,12 @@ export class RenderingSystem {
     } else if (isHovered) {
       this.ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
       this.ctx.shadowBlur = 15;
+    } 
+    
+    // ULTIMATE GLOW
+    if (u.isUlting) {
+        this.ctx.shadowColor = '#22d3ee'; // Cyan
+        this.ctx.shadowBlur = 25 + Math.sin(performance.now() / 50) * 10; // Pulsing
     }
 
     if (u.attackPattern === 'SWING' && u.attackState === 'ATTACKING' && u.attackProgress) {
@@ -295,7 +320,7 @@ export class RenderingSystem {
       
       this.ctx.save();
       this.ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for HUD elements
-      this.ctx.translate(x + offsetX + recoil, y);
+      this.ctx.translate(x + offsetX + recoil + shakeX, y + shakeY);
       
       const barX = -barWidth / 2;
       const barY = -40;
@@ -308,12 +333,25 @@ export class RenderingSystem {
       this.ctx.fillRect(barX, barY, barWidth * hpPct, barHeight);
 
       if (u.isHero) {
-        const maxEnergy = useGameStore.getState().stats.heroMaxEnergy || 100;
-        const ep = (u.energy || 0) / maxEnergy;
+        // Render Energy Bar or Ult Timer
         this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
         this.ctx.fillRect(barX, barY + 80, barWidth, 4);
-        this.ctx.fillStyle = 'cyan';
-        this.ctx.fillRect(barX, barY + 80, barWidth * ep, 4);
+        
+        if (u.isUlting) {
+            // Show decreasing timer bar
+            const maxDuration = 3.0 + (useGameStore.getState().stats.ult_duration_bonus || 0);
+            const remaining = Math.max(0, u.ultTimer || 0);
+            const timerPct = remaining / maxDuration;
+            
+            this.ctx.fillStyle = '#facc15'; // Yellow/Gold for active ult
+            this.ctx.fillRect(barX, barY + 80, barWidth * timerPct, 4);
+        } else {
+            // Show charging energy bar
+            const maxEnergy = useGameStore.getState().stats.heroMaxEnergy || 100;
+            const ep = (u.energy || 0) / maxEnergy;
+            this.ctx.fillStyle = 'cyan';
+            this.ctx.fillRect(barX, barY + 80, barWidth * ep, 4);
+        }
       }
       this.ctx.restore();
     }

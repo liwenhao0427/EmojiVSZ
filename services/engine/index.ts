@@ -9,6 +9,7 @@ import { UnitSystem } from './systems/UnitSystem';
 import { ProjectileSystem } from './systems/ProjectileSystem';
 import { FloatingTextSystem } from './systems/FloatingTextSystem';
 import { InspectionSystem } from './systems/InspectionSystem';
+import { Log } from '../Log';
 
 export interface EngineCallbacks {
   onGainLoot?: (xp: number, gold: number) => void;
@@ -71,12 +72,11 @@ export class GameEngine {
     };
   }
 
-  // 核心修复：添加手动重置方法，用于在游戏完全重启时调用
   public reset() {
+    Log.i('Engine', 'Resetting engine state completely.');
     this.stop();
     this.gameState.reset();
     this.unitSystem.reset();
-    // 强制执行一次绘制以清除画面上的残留敌人
     this.renderingSystem.draw(this.gameState, null);
   }
 
@@ -93,13 +93,13 @@ export class GameEngine {
   }
 
   public startWave(duration: number, wave: number) {
-    this.lastTime = performance.now(); // FIX: Reset timer to prevent massive DT on wave start
+    Log.i('Engine', `startWave called with duration=${duration}, wave=${wave}.`);
+    this.lastTime = performance.now();
     this.gameState.reset();
     this.gameState.waveTime = duration > 0 ? duration : 30;
     this.gameState.waveDuration = this.gameState.waveTime;
     this.unitSystem.reset();
     
-    // Prepare enemy spawn queue and pacing for the new wave
     this.enemySystem.prepareWave(wave);
 
     this.callbacks.onTimeUpdate?.(this.gameState.waveTime);
@@ -130,25 +130,23 @@ export class GameEngine {
   private update(dt: number, timestamp: number) {
     const store = useGameStore.getState();
     
-    // Visual updates can happen even when paused (for dragging)
     this.renderingSystem.update(dt);
     this.inspectionSystem.update(dt, this.gameState, this.callbacks);
 
     if (store.phase !== GamePhase.COMBAT) return;
 
-    // Game Logic updates
     this.gameState.waveTime -= dt;
 
     if (this.gameState.waveTime <= 0) {
       this.gameState.waveTime = 0;
-      useGameStore.getState().resetWaveState();
+      this.gameState.enemies = [];
+      this.gameState.projectiles = [];
+      this.gameState.floatingTexts = [];
       this.callbacks.onWaveEnd?.();
       return; 
     }
     
-    // Run systems in order
     this.enemySystem.update(dt, this.gameState, this.callbacks);
-    // 将 projectileSystem 传递给 unitSystem，以使用对象池
     this.unitSystem.update(dt, this.gameState, this.callbacks, this.projectileSystem);
     this.projectileSystem.update(dt, this.gameState, this.callbacks);
     this.floatingTextSystem.update(dt, this.gameState, this.callbacks);

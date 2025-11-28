@@ -1,5 +1,4 @@
 
-
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -18,9 +17,12 @@ export class UnitSystem implements System {
 
   update(dt: number, gameState: GameState, callbacks: EngineCallbacks, projectileSystem?: ProjectileSystem) {
     const store = useGameStore.getState();
-    const { gridUnits } = store;
+    const unitIds = store.gridUnits.map(u => u.id); // Work with IDs to avoid stale objects
 
-    gridUnits.forEach(u => {
+    unitIds.forEach(id => {
+        const u = useGameStore.getState().gridUnits.find(unit => unit.id === id);
+        if (!u) return;
+
         if (u.isDead) {
             if (u.effects?.explode_on_death || u.effects?.explode_on_hit || u.effects?.trigger_on_move) {
                 this.triggerExplosion(u, gameState, callbacks);
@@ -37,8 +39,24 @@ export class UnitSystem implements System {
 
       this.handleSpecialEffects(u, dt, gameState, callbacks);
       
+      if (u.isHero) {
+          if (u.isUlting) {
+              store.updateUltTimer(dt);
+          } else {
+              store.updateHeroEnergy(5 * dt);
+              const latestHeroState = useGameStore.getState().gridUnits.find(unit => unit.isHero);
+              const maxEnergy = useGameStore.getState().stats.heroMaxEnergy || 100;
+              if (latestHeroState && latestHeroState.energy && latestHeroState.energy >= maxEnergy) {
+                this.triggerUltimate(latestHeroState, gameState, callbacks);
+                store.updateHeroEnergy(-maxEnergy); 
+              }
+          }
+      }
+      
       if (u.attackState === 'ATTACKING') {
         u.attackProgress = (u.attackProgress || 0) + dt * 4.0;
+        if (u.isUlting) u.attackProgress += dt * 8.0; 
+        
         if (u.attackProgress >= 1) {
             u.attackState = 'IDLE';
             u.attackProgress = 0;
@@ -52,16 +70,6 @@ export class UnitSystem implements System {
       }
       
       if(u.damage === 0 || u.attackPattern === 'NONE') return;
-
-      let heroAspdBuff = u.isHero ? 1.0 + (store.stats.heroTempAttackSpeedMult || 0) : 1.0;
-      if (u.isHero) {
-        store.updateHeroEnergy(5 * dt);
-        const maxEnergy = store.stats.heroMaxEnergy || 100;
-        if (u.energy && u.energy >= maxEnergy) {
-          this.triggerUltimate(u, gameState, callbacks, projectileSystem);
-          store.updateHeroEnergy(-maxEnergy); 
-        }
-      }
 
       let cd = this.unitCooldowns.get(u.id) || 0;
       if (cd > 0) {
@@ -109,13 +117,20 @@ export class UnitSystem implements System {
           case 'STREAM':
           case 'SHOOT':
           default:
-              audioManager.play('shoot', { volume: 0.2 });
+              audioManager.play('shoot', { volume: u.isUlting ? 0.1 : 0.2 });
               this.fireProjectile(u, unitX, unitY, target, gameState, projectileSystem);
               break;
       }
       
-      const buff = (1 + (store.stats.attackSpeed / 100)) * heroAspdBuff;
-      this.unitCooldowns.set(u.id, u.maxCooldown / buff);
+      let heroAspdBuff = u.isHero ? 1.0 + (store.stats.heroTempAttackSpeedMult || 0) : 1.0;
+      let buff = (1 + (store.stats.attackSpeed / 100)) * heroAspdBuff;
+      let cooldownTime = u.maxCooldown / buff;
+
+      if (u.isUlting) {
+          cooldownTime = cooldownTime / 10;
+      }
+
+      this.unitCooldowns.set(u.id, cooldownTime);
     });
   }
 
@@ -199,33 +214,12 @@ export class UnitSystem implements System {
     }
   }
 
-  private triggerUltimate(hero: Unit, gameState: GameState, callbacks: EngineCallbacks, projectileSystem?: ProjectileSystem) {
-    callbacks.onAddFloatingText?.(gameState, '终极弹幕!', 'gold', 600, 400);
-
-    if (!projectileSystem) return;
-
-    const unitX = GRID_OFFSET_X + (hero.col * CELL_SIZE) + CELL_SIZE / 2;
-    const unitY = GRID_OFFSET_Y + (hero.row * CELL_SIZE) + CELL_SIZE / 2;
-    const damage = this.calculateFinalDamage(hero, useGameStore.getState().stats);
-
-    // Fire a volley of 10 powerful, piercing projectiles down the hero's lane
-    for (let i = 0; i < 10; i++) {
-        const proj: Omit<Projectile, 'id'> = {
-            x: unitX + i * 5, // Stagger them slightly for a visual "beam" effect
-            y: unitY,
-            vx: 1200, // Faster than normal projectiles
-            vy: 0,
-            damage: damage * 0.5, // Each shot deals 50% of hero's damage
-            emoji: '🌟',
-            radius: 12,
-            markedForDeletion: false,
-            type: 'LINEAR',
-            originType: hero.type,
-            pierce: 3, // Can hit up to 3 enemies
-            hitEnemies: [],
-        };
-        projectileSystem.spawnProjectile(gameState, proj);
-    }
+  private triggerUltimate(hero: Unit, gameState: GameState, callbacks: EngineCallbacks) {
+    const store = useGameStore.getState();
+    const bonusDuration = store.stats.ult_duration_bonus || 0;
+    const duration = 3.0 + bonusDuration;
+    store.setHeroUltState(true, duration);
+    callbacks.onAddFloatingText?.(gameState, 'OVERDRIVE!', '#22d3ee', 600, 400); // Cyan color
   }
 
   private fireProjectile(u: Unit, x: number, y: number, target: Enemy | undefined, gameState: GameState, projectileSystem?: ProjectileSystem) {

@@ -11,30 +11,29 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, INITIAL_STATS } from './constants';
 import { WAVE_DATA } from './data/waves';
 import { HUD } from './components/HUD';
 import { InspectorPanel } from './components/InspectorPanel';
-import { InventoryPanel } from './components/InventoryPanel';
 import { audioManager, SOUND_MAP } from './services/audioManager';
-import { PreparingWaveScreen } from './components/PreparingWaveScreen';
+import { Log } from './services/Log';
 
 export default function App() {
-  const { phase, setPhase, initGame, stats, startNextWave, applyDraft, setInspectedEntity, buyBrotatoItem } = useGameStore();
+  const { phase, setPhase, initGame, stats, startNextWave, applyDraft, setInspectedEntity, buyBrotatoItem, endWaveAndGoToShop } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const waveStartedRef = useRef(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const [isShopVisible, setShopVisible] = useState(true);
 
-  // Subscribe to inspected entity changes from the store
   const inspectedEntity = useGameStore(state => state.inspectedEntity);
 
-  // Initial load
   useEffect(() => {
-    // 预加载所有音效
     audioManager.load(SOUND_MAP);
+    Log.displayLogsUI();
+    Log.i('App', 'Component mounted, audio loaded, log UI initialized.');
   }, []);
 
-  // Engine Initialization
   useEffect(() => {
     if (canvasRef.current && !engineRef.current) {
+      Log.i('EngineInit', 'Canvas is ready, creating GameEngine instance.');
       engineRef.current = new GameEngine(
         canvasRef.current,
         {
@@ -50,9 +49,9 @@ export default function App() {
               if (newXp >= newMaxXp) {
                   newXp -= newMaxXp;
                   newLevel += 1;
-                  // Harder scaling for levels: +50% requirement per level
                   newMaxXp = Math.floor(newMaxXp * 1.5); 
                   didLevelUp = true;
+                  Log.i('AppCallback', `Level Up! New level: ${newLevel}`);
               }
 
               useGameStore.setState(s => ({ 
@@ -68,12 +67,15 @@ export default function App() {
               if (didLevelUp) {
                   engineRef.current?.stop();
                   setShowLevelUp(true);
+                  Log.i('AppCallback', 'Level up detected. Pausing engine and showing level up modal.');
               }
           },
           onWaveEnd: () => {
-              setPhase(GamePhase.SHOP);
+              Log.i('EngineCallback', 'onWaveEnd triggered. Calling endWaveAndGoToShop.');
+              endWaveAndGoToShop();
           },
           onGameOver: () => {
+              Log.i('EngineCallback', 'onGameOver triggered. Setting phase to GAME_OVER.');
               engineRef.current?.stop();
               setPhase(GamePhase.GAME_OVER);
           },
@@ -85,41 +87,47 @@ export default function App() {
     }
     
     return () => {
+        Log.i('EngineInit', 'App unmounting, cleaning up engine.');
         engineRef.current?.cleanup();
     };
   }, []);
 
-  // Logic 1: Handle Phase Transitions (Prepare -> Combat)
   useEffect(() => {
-    if (phase === GamePhase.PREPARING_WAVE) {
-        // Stop engine visual updates during static screens if needed, 
-        // but keeping it stopped ensures we don't have game logic running.
-        // We rely on the PreparingScreen overlay.
-        const timer = setTimeout(() => {
-            setPhase(GamePhase.COMBAT);
-        }, 1200); // Increased slightly for better UX
-        return () => clearTimeout(timer);
+    Log.i('PhaseLogic', `Phase changed to: ${phase}`);
+    if (phase === GamePhase.SHOP) {
+        setShopVisible(true);
+        const nextWaveNumber = stats.wave + 1;
+        const config = WAVE_DATA.find(w => w.wave === nextWaveNumber) || WAVE_DATA[WAVE_DATA.length - 1];
+        setTimeLeft(config.duration);
+        Log.i('PhaseLogic', `Entered SHOP. Pre-set timer for next wave (${nextWaveNumber}) to ${config.duration}s.`);
     }
-  }, [phase, setPhase]);
+  }, [phase]);
 
-  // Logic 2: Engine Start/Stop Control
   useEffect(() => {
-    if (phase === GamePhase.COMBAT) {
+    if (phase === GamePhase.COMBAT && !showLevelUp) {
         audioManager.play('music', { loop: true, volume: 0.2 });
-        if (!showLevelUp) {
-          engineRef.current?.start();
+        // If wave has already started, we are resuming from pause.
+        if (waveStartedRef.current === stats.wave) {
+             Log.i('EngineControl', `Resuming combat phase. Starting engine.`);
+             engineRef.current?.start();
+        } else {
+             Log.i('EngineControl', `New wave detected. Deferring engine start to WaveSync.`);
         }
+    } else if (phase === GamePhase.SHOP && !showLevelUp) {
+        Log.i('EngineControl', `Phase is SHOP. Ensuring engine is RUNNING for UI.`);
+        engineRef.current?.start();
+        audioManager.stopMusic();
     } else {
+        Log.i('EngineControl', `Phase is ${phase} or level up is shown. Ensuring engine is STOPPED.`);
         audioManager.stopMusic();
         engineRef.current?.stop();
     }
-  }, [phase, showLevelUp]);
+  }, [phase, showLevelUp, stats.wave]);
   
-  // Logic 3: Wave Synchronization (The Critical Fix)
   useEffect(() => {
-    // Only trigger wave start if we are in combat, not leveling up, and the wave number has changed
-    // since the last time we started the engine.
+    Log.i('WaveSync', `Checking if wave should start. Phase: ${phase}, ShowLevelUp: ${showLevelUp}, WaveRef: ${waveStartedRef.current}, StoreWave: ${stats.wave}`);
     if (phase === GamePhase.COMBAT && !showLevelUp && waveStartedRef.current !== stats.wave) {
+        Log.i('WaveSync', `CONDITION MET. Starting wave ${stats.wave}. Updating ref to ${stats.wave}.`);
         waveStartedRef.current = stats.wave;
         const config = WAVE_DATA.find(w => w.wave === stats.wave) || WAVE_DATA[WAVE_DATA.length-1];
         engineRef.current?.startWave(config.duration, stats.wave);
@@ -127,30 +135,34 @@ export default function App() {
   }, [phase, showLevelUp, stats.wave]);
 
   const handleStartGame = () => {
-    // 关键修复：彻底重置引擎状态，防止上一局的敌人残留导致判定死亡
+    Log.i('App', '--- NEW GAME STARTED ---');
     engineRef.current?.reset();
+    waveStartedRef.current = 0;
     
-    waveStartedRef.current = 0; // Reset ref so Logic 3 triggers for Wave 1
+    initGame();
     
-    initGame(); // Reset Zustand Store
+    const wave1Config = WAVE_DATA.find(w => w.wave === 1) || WAVE_DATA[0];
+    setTimeLeft(wave1Config.duration);
+    Log.i('App', `handleStartGame: Set timer for wave 1 to ${wave1Config.duration}s.`);
+
     setShowLevelUp(false);
     setInspectedEntity(null);
   };
 
   const handleRestart = () => {
+    Log.i('App', 'Restart button clicked.');
     handleStartGame();
   };
 
   const handleDraftSelect = (option: DraftOption) => {
+      Log.i('App', `Draft selected: ${option.name}. Resuming combat.`);
       applyDraft(option);
       setShowLevelUp(false);
-      // Engine will auto-resume due to Logic 2
   };
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-white font-sans relative overflow-hidden">
       
-      {/* Main Game Container */}
       <div 
         className="relative shadow-2xl border border-slate-800 bg-slate-900 rounded-lg overflow-hidden"
         style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
@@ -159,45 +171,29 @@ export default function App() {
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="block w-full h-full cursor-pointer"
+          className="w-full h-full block"
         />
 
-        {/* Start Screen */}
-        {phase === GamePhase.START && (
-            <StartScreen onStart={handleStartGame} />
-        )}
+        {/* Full-screen overlays */}
+        {phase === GamePhase.START && <StartScreen onStart={handleStartGame} />}
+        {phase === GamePhase.GAME_OVER && <GameOverScreen currentWave={stats.wave} onRestart={handleRestart} />}
+        {showLevelUp && <LevelUpModal onSelect={handleDraftSelect} level={stats.level} />}
         
-        {phase === GamePhase.PREPARING_WAVE && <PreparingWaveScreen />}
+        {phase === GamePhase.SHOP && (
+            <Shop 
+              onBuyItem={buyBrotatoItem} 
+              onNextWave={startNextWave}
+              isVisible={isShopVisible}
+              onVisibilityChange={setShopVisible}
+            />
+        )}
 
-        {/* HUD Overlay */}
+        {/* HUD and side panels, visible during combat and shop phases */}
         {(phase === GamePhase.COMBAT || phase === GamePhase.SHOP) && (
           <>
             <HUD stats={stats} waveTime={timeLeft} currentWave={stats.wave} />
             <InspectorPanel entity={inspectedEntity} />
-            
-             {phase === GamePhase.SHOP && <InventoryPanel />}
           </>
-        )}
-
-        {/* Modals & Screens */}
-        
-        {/* Level Up Overlay (Triggers on XP Threshold) */}
-        {showLevelUp && (
-            <LevelUpModal 
-                level={stats.level} 
-                onSelect={handleDraftSelect} 
-            />
-        )}
-        
-        {phase === GamePhase.SHOP && (
-            <Shop 
-                onNextWave={startNextWave}
-                onBuyItem={(item) => buyBrotatoItem(item)}
-            />
-        )}
-        
-        {phase === GamePhase.GAME_OVER && (
-          <GameOverScreen currentWave={stats.wave} onRestart={handleRestart} />
         )}
       </div>
     </div>

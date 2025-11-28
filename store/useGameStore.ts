@@ -1,11 +1,11 @@
 
-
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem, HeroUpgradeStatus } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 import { ITEMS_DATA } from '../data/items';
 import { UNIT_DATA } from '../data/units';
+import { Log } from '../services/Log';
 
 // A mapping from item stat keys to player stat keys
 const STAT_KEY_MAP: Record<string, string> = {
@@ -46,8 +46,10 @@ interface GameStore {
   damageUnit: (unitId: string, amount: number) => void;
   updateHeroEnergy: (amount: number) => void;
   startNextWave: () => void;
-  resetWaveState: () => void;
+  endWaveAndGoToShop: () => void;
   addGold: (amount: number) => void;
+  setHeroUltState: (isUlting: boolean, ultTimer?: number) => void;
+  updateUltTimer: (dt: number) => void;
 }
 
 const calculateFinalStats = (ownedItems: Record<string, number>, allItems: BrotatoItem[], currentStats: PlayerStats): PlayerStats => {
@@ -135,10 +137,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
     }
 
+    Log.i('Store', 'initGame: Resetting all stats and units for a new game.');
     set({
       stats: { ...INITIAL_STATS, wave: 1, gold: 10, heroLevel: 1 }, 
       gridUnits: starters,
-      phase: GamePhase.PREPARING_WAVE,
+      phase: GamePhase.COMBAT,
       draftOptions: [],
       inspectedEntity: null,
       ownedItems: {},
@@ -264,19 +267,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const unit = units[unitIndex];
       const targetUnit = units.find(u => u.row === tRow && u.col === tCol && u.id !== unitId);
       
-      // If target cell is occupied by a dead unit (tombstone), block the move.
-      if (targetUnit && targetUnit.isDead) {
-          return {}; // Invalid move, do nothing.
-      }
-      
-      // If target cell is occupied by a living unit, swap them.
-      if (targetUnit && !targetUnit.isDead) {
+      if (targetUnit) {
+        // Swap positions with the target unit (dead or alive)
         targetUnit.row = unit.row;
         targetUnit.col = unit.col;
         unit.row = tRow;
         unit.col = tCol;
       } else {
-        // If target cell is empty, just move the unit.
+        // Move to an empty cell
         unit.row = tRow;
         unit.col = tCol;
       }
@@ -324,50 +322,77 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return { gridUnits: units };
     });
   },
-
-  startNextWave: () => {
-    set(state => {
-      const nextUnits = state.gridUnits
-        .filter(u => !u.isTemp && !u.isDead) 
-        .map(u => {
-            // Reset Hero to default state visually if needed, but the logic relies on heroUpgradeStatus
-            if (u.isHero) {
-                return { ...u, hp: u.maxHp, isDead: false, energy: 0, attackType: 'LINEAR', effects: {} };
+  
+  updateUltTimer: (dt) => set(state => {
+    let needsUpdate = false;
+    const units = state.gridUnits.map(u => {
+        if (u.isHero && u.isUlting && u.ultTimer) {
+            needsUpdate = true;
+            const newTimer = u.ultTimer - dt;
+            if (newTimer <= 0) {
+                return { ...u, isUlting: false, ultTimer: 0 };
             }
-            return { ...u, hp: u.maxHp, isDead: false, energy: 0 };
-        });
-      
-      const nextStats = calculateFinalStats(state.ownedItems, state.allItems, state.stats);
+            return { ...u, ultTimer: newTimer };
+        }
+        return u;
+    });
+    return needsUpdate ? { gridUnits: units } : {};
+  }),
 
-      nextStats.tempDamageMult = 0;
-      nextStats.tempAttackSpeedMult = 0;
-      nextStats.heroTempDamageMult = 0;
-      nextStats.heroTempAttackSpeedMult = 0;
+  setHeroUltState: (isUlting, ultTimer) => set(state => {
+      const units = state.gridUnits.map(u => {
+          if (u.isHero) {
+              return { ...u, isUlting, ultTimer: isUlting ? ultTimer : 0 };
+          }
+          return u;
+      });
+      return { gridUnits: units };
+  }),
+
+  endWaveAndGoToShop: () => {
+    set(state => {
+      Log.i('Store', `endWaveAndGoToShop: phase -> SHOP. Current wave is still ${state.stats.wave}.`);
+      const nextUnits = state.gridUnits
+        .filter(u => !u.isTemp) 
+        .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
       
-      // Increment wave and reset per-wave stats
-      nextStats.wave = state.stats.wave + 1;
-      nextStats.level = 1;
-      nextStats.xp = 0;
-      nextStats.maxXp = INITIAL_STATS.maxXp;
+      const baseStats = calculateFinalStats(state.ownedItems, state.allItems, state.stats);
+      baseStats.tempDamageMult = 0;
+      baseStats.tempAttackSpeedMult = 0;
+      baseStats.heroTempDamageMult = 0;
+      baseStats.heroTempAttackSpeedMult = 0;
 
       return {
         gridUnits: nextUnits,
-        stats: nextStats,
-        draftOptions: [], 
-        phase: GamePhase.PREPARING_WAVE,
-        heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 } // Reset hero upgrades
+        stats: baseStats,
+        phase: GamePhase.SHOP,
       };
     });
   },
 
-  resetWaveState: () => {
+  startNextWave: () => {
     set(state => {
-      const nextUnits = state.gridUnits
-        .filter(u => !u.isTemp && !u.isDead) 
-        .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
-      
+      Log.i('Store', `startNextWave: phase -> COMBAT, wave -> ${state.stats.wave + 1}.`);
+      const unitsWithResetHero = state.gridUnits.map(u => {
+        if (u.isHero) {
+          // FIX: Add 'as const' to ensure TypeScript infers 'LINEAR' as a literal type,
+          // not a generic string, which resolves the type incompatibility with the Unit interface.
+          return { ...u, attackType: 'LINEAR' as const, effects: {} };
+        }
+        return u;
+      });
+
       return {
-        gridUnits: nextUnits,
+        gridUnits: unitsWithResetHero,
+        stats: {
+          ...state.stats,
+          wave: state.stats.wave + 1,
+          level: 1,
+          xp: 0,
+          maxXp: INITIAL_STATS.maxXp,
+        },
+        phase: GamePhase.COMBAT,
+        heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 },
       };
     });
   },
@@ -380,19 +405,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         get().addUnit({ ...option.data, isTemp: true });
       } else if (option.type === 'HERO_UPGRADE') {
           const upgradeData = option.data as any;
-          // Track level
           if (upgradeData.upgradePath) {
               const currentStatus = { ...state.heroUpgradeStatus };
               currentStatus[upgradeData.upgradePath as keyof HeroUpgradeStatus] = upgradeData.upgradeLevel;
               nextState.heroUpgradeStatus = currentStatus;
           }
 
-          // Apply stats
           const nextStats = { ...state.stats };
           if (upgradeData.heroDamage) nextStats.heroTempDamageMult = (nextStats.heroTempDamageMult || 0) + upgradeData.heroDamage;
           nextState.stats = nextStats;
           
-          // Apply unit properties immediately
           const units = [...state.gridUnits];
           const heroIndex = units.findIndex(u => u.isHero);
           if (heroIndex !== -1) {
@@ -414,7 +436,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (buff.heroDamage) nextStats.heroTempDamageMult = (nextStats.heroTempDamageMult || 0) + buff.heroDamage;
         if (buff.heroAttackSpeed) nextStats.heroTempAttackSpeedMult = (nextStats.heroTempAttackSpeedMult || 0) + buff.heroAttackSpeed;
         if (buff.heroEnergyGainRate) nextStats.heroEnergyGainRate = (nextStats.heroEnergyGainRate || 1.0) + buff.heroEnergyGainRate;
-        if (buff.heroMaxEnergy) nextStats.heroMaxEnergy = Math.max(20, (nextStats.heroMaxEnergy || 100) + buff.heroMaxEnergy);
+        if (buff.heroMaxEnergy) nextStats.heroMaxEnergy = Math.max(20, (nextState.stats.heroMaxEnergy || 100) + buff.heroMaxEnergy);
 
         nextState.stats = nextStats;
       }

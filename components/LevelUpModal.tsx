@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { PlayerStats, DraftOption, Unit, WeaponClass, UnitData, HeroUpgradeStatus } from '../types';
 import { Sparkles, Sword, Zap, User, ArrowUpCircle } from 'lucide-react';
@@ -37,20 +36,20 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
       
       const { multishot, effect, bounce } = heroUpgradeStatus;
 
-      // New Ultimate Upgrade path
-      if (Math.random() < 0.25) { // 25% chance to offer an ultimate upgrade
+      // New Ultimate Upgrade path (Adapting to "Overdrive" mechanics)
+      if (Math.random() < 0.25) { 
            const ultLevel = stats.ult_level || 0;
            if (ultLevel === 0) return {
-              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⏱️', name: '延时核心', description: '终极技能持续时间 +1s',
+              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⏱️', name: '持久核心', description: '大招持续时间 +1s',
               data: { extraEffects: { ult_duration_bonus: (stats.ult_duration_bonus || 0) + 1, ult_level: 1 }, upgradePath: 'ultimate', upgradeLevel: 1 }
            };
            if (ultLevel === 1) return {
-              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⚡', name: '超载核心', description: '终极技能伤害频率 +25%',
-              data: { extraEffects: { ult_tick_rate_bonus: (stats.ult_tick_rate_bonus || 0) + 0.25, ult_level: 2 }, upgradePath: 'ultimate', upgradeLevel: 2 }
+              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⚡', name: '狂暴核心', description: '大招期间伤害 +50%',
+              data: { heroDamage: 0.5, extraEffects: { ult_level: 2 }, upgradePath: 'ultimate', upgradeLevel: 2 }
            };
            if (ultLevel >= 2) return {
-              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '↔️', name: '扩容核心', description: '终极技能影响相邻行',
-              data: { extraEffects: { ult_width_bonus: (stats.ult_width_bonus || 0) + 1, ult_level: (ultLevel + 1) }, upgradePath: 'ultimate', upgradeLevel: ultLevel + 1 }
+              id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🔋', name: '快充核心', description: '大招充能速度 +50%',
+              data: { heroEnergyGainRate: 0.5, extraEffects: { ult_level: ultLevel + 1 }, upgradePath: 'ultimate', upgradeLevel: ultLevel + 1 }
            };
       }
 
@@ -120,7 +119,7 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
     const baseBuffOptions: Omit<DraftOption, 'id'>[] = [
         { type: 'TEMP_BUFF', name: '全体过载', emoji: '🚀', description: '本波次所有单位攻速提高 30%。', data: { attackSpeed: 0.3 } },
         { type: 'TEMP_BUFF', name: '战斗怒吼', emoji: '🗣️', description: '本波次所有单位伤害提高 20%。', data: { damage: 0.2 } },
-        { type: 'TEMP_BUFF', name: '专注', emoji: '🧘', description: '终极技能充能速度 +50%。', data: { heroEnergyGainRate: 0.5 } }
+        { type: 'TEMP_BUFF', name: '专注', emoji: '🧘', description: '大招充能速度 +50%。', data: { heroEnergyGainRate: 0.5 } }
     ];
 
     const finalOptions: DraftOption[] = [];

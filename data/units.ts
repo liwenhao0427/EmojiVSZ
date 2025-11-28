@@ -1,5 +1,4 @@
 
-
 import { UnitData } from '../types';
 
 const unitsArray: Omit<UnitData, 'id'>[] = [
@@ -11,7 +10,6 @@ const unitsArray: Omit<UnitData, 'id'>[] = [
     { "name": "火把", "emoji": "🕯️", "type": "MELEE", "attackPattern": "SWING", "price": 18, "damage": 5, "cd": 1.08, "range": 120, "maxHp": 100, "effect": { "burn_chance": 100 }, "desc": "攻击使敌人燃烧" },
     { "name": "树枝", "emoji": "🥢", "type": "MELEE", "attackPattern": "SWING", "price": 15, "damage": 8, "cd": 1.25, "range": 120, "maxHp": 100, "effect": { "stick_bonus": 4 }, "desc": "场上树枝越多伤害越高" },
     { "name": "螺丝刀", "emoji": "🪛", "type": "ENGINEERING", "attackPattern": "NONE", "price": 25, "damage": 8, "cd": 1.08, "range": 100, "maxHp": 100, "effect": { "spawn_mine": 12 }, "desc": "每 12 秒生成一个地雷" },
-    { "name": "土豆雷", "emoji": "🥔", "type": "ENGINEERING", "attackPattern": "NONE", "price": 40, "damage": 1200, "cd": 15, "range": 50, "maxHp": 10, "effect": { "mine_arm_time": 15, "explode_on_contact": 1 }, "desc": "准备时间长，接触敌人爆炸" },
     { "name": "魔杖", "emoji": "🪄", "projectileEmoji": "🟣", "type": "MAGIC", "attackPattern": "SHOOT", "price": 35, "damage": 8, "cd": 0.87, "range": 350, "maxHp": 80, "effect": { "burn_damage": 3 }, "desc": "发射魔法弹，造成燃烧" },
     { "name": "长矛", "emoji": "🔱", "type": "MELEE", "attackPattern": "THRUST", "price": 40, "damage": 18, "cd": 1.34, "range": 250, "maxHp": 100, "desc": "长距离突刺攻击" },
     { "name": "小刀", "emoji": "🔪", "type": "MELEE", "attackPattern": "SWING", "price": 30, "damage": 8, "cd": 1.0, "range": 120, "maxHp": 80, "crit": 0.25, "desc": "斜向挥砍，高暴击" },
@@ -30,7 +28,6 @@ const unitsArray: Omit<UnitData, 'id'>[] = [
     { "name": "幽灵权杖", "emoji": "💀", "projectileEmoji": "👻", "type": "MAGIC", "attackPattern": "SHOOT", "price": 45, "damage": 10, "cd": 1.03, "range": 300, "maxHp": 80, "effect": { "hp_growth": 1 }, "desc": "击杀增加生命上限" },
     { "name": "加特林豌豆", "emoji": "🌿", "projectileEmoji": "🟢", "type": "RANGED", "attackPattern": "SHOOT", "price": 120, "damage": 20, "cd": 0.3, "range": 800, "maxHp": 150, "desc": "超高攻速发射豌豆" },
     { "name": "寒冰射手", "emoji": "❄️", "projectileEmoji": "🔵", "type": "RANGED", "attackPattern": "SHOOT", "price": 175, "damage": 20, "cd": 1.5, "range": 800, "maxHp": 100, "effect": { "slow_on_hit": 1 }, "desc": "发射冰豌豆，减速敌人" },
-    { "name": "樱桃炸弹", "emoji": "🍒", "type": "MAGIC", "attackPattern": "NONE", "price": 150, "damage": 800, "cd": 0, "range": 200, "maxHp": 50, "isTemporary": true, "effect": { "explode_on_hit": 1, "trigger_on_move": 1 }, "desc": "受到攻击或被拖动时立即爆炸" },
     { "name": "大嘴花", "emoji": "🪴", "type": "MELEE", "attackPattern": "NONE", "price": 150, "damage": 1000, "cd": 40, "range": 120, "maxHp": 150, "effect": { "execute_threshold": 1000 }, "desc": "吞噬生命值低于1000的敌人" },
     { "name": "十字弩", "emoji": "🏹", "projectileEmoji": "➖", "type": "RANGED", "attackPattern": "SHOOT", "price": 80, "damage": 8, "cd": 1.13, "range": 350, "maxHp": 80, "effect": { "pierce_on_crit": 1 }, "desc": "暴击穿透" },
     { "name": "碎纸机", "emoji": "🧨", "projectileEmoji": "💣", "type": "RANGED", "attackPattern": "SHOOT", "price": 75, "damage": 5, "cd": 1.3, "range": 450, "maxHp": 100, "effect": { "explode_chance": 50 }, "desc": "50%几率爆炸" },

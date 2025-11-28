@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { PlayerStats } from '../types';
+import { PlayerStats, GamePhase } from '../types';
 import { Zap, Shield, Swords, Crosshair, Wind, Clover, Menu, Magnet, GraduationCap, Coins } from 'lucide-react';
+import { useGameStore } from '../store/useGameStore';
 
 interface HUDProps {
   stats: PlayerStats;
@@ -48,8 +49,14 @@ const StatRow: React.FC<{ statKey: string; value: number }> = ({ statKey, value 
 export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
   const xpPct = (stats.xp / stats.maxXp) * 100;
   const [isExpanded, setIsExpanded] = useState(false);
+  const { phase } = useGameStore();
 
   const displayedStats = Object.keys(STAT_DISPLAY_CONFIG).filter(key => stats[key] && stats[key] !== 0);
+
+  const isShopPhase = phase === GamePhase.SHOP;
+  const displayWave = isShopPhase ? currentWave + 1 : currentWave;
+  const displayTime = Math.ceil(waveTime);
+  const timerIsUrgent = !isShopPhase && waveTime > 0 && waveTime < 10;
 
   return (
     <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
@@ -87,9 +94,9 @@ export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
 
             {/* Center: Timer */}
             <div className="flex flex-col items-center justify-center -mt-2">
-                 <div className="text-xs font-black text-gray-500 tracking-[0.2em] uppercase">第 {currentWave} 波</div>
-                 <div className={`text-4xl font-mono font-black drop-shadow-lg ${waveTime < 10 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-                    {Math.ceil(waveTime)}
+                 <div className="text-xs font-black text-gray-500 tracking-[0.2em] uppercase">第 {displayWave} 波</div>
+                 <div className={`text-4xl font-mono font-black drop-shadow-lg ${timerIsUrgent ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                    {displayTime}
                  </div>
             </div>
 
