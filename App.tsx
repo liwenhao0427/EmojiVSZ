@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/GameEngine';
 import { StartScreen } from './components/StartScreen';
@@ -8,7 +7,7 @@ import { GameOverScreen } from './components/GameOverScreen';
 import { Shop } from './components/Shop';
 import { useGameStore } from './store/useGameStore';
 import { GamePhase } from './types';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG } from './constants';
 import { HUD } from './components/HUD';
 
 export default function App() {
@@ -40,7 +39,13 @@ export default function App() {
     } else {
       engineRef.current?.stop();
     }
-  }, [phase]);
+    
+    // FIX: Explicitly start the wave timer and logic when entering COMBAT
+    if (phase === GamePhase.COMBAT) {
+        const config = WAVE_CONFIG.find(w => w.wave === stats.wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
+        engineRef.current?.startWave(config.duration, stats.wave);
+    }
+  }, [phase, stats.wave]);
 
   const handleRestart = () => {
     initGame(); // Reset to Start Screen

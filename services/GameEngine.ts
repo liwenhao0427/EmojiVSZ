@@ -48,7 +48,7 @@ export class GameEngine {
   // Visual State Map (Separates Logic from Rendering)
   private visualUnits: Map<string, VisualUnit> = new Map();
   
-  private waveTime: number = 0; // Counts DOWN now
+  private waveTime: number = 30; // Default safe value
   private spawnTimer: number = 0;
   
   // Input State
@@ -76,6 +76,7 @@ export class GameEngine {
   public start() {
     if (this.isRunning) return;
     this.isRunning = true;
+    // CRITICAL FIX: Reset lastTime to prevent huge dt on first frame
     this.lastTime = performance.now();
     this.loop(this.lastTime);
   }
@@ -92,10 +93,16 @@ export class GameEngine {
     this.loot = []; 
     this.unitCooldowns.clear();
     
-    // FIX: Timer counts DOWN
-    this.waveTime = duration; 
+    // CRITICAL FIX: Fallback for duration to prevent instant skip
+    this.waveTime = (duration && duration > 0) ? duration : 30; 
     this.spawnTimer = 2.0; 
     
+    // Reset timer throttle
+    this.lastTimerUpdate = 0;
+    this.callbacks?.onTimeUpdate?.(this.waveTime);
+
+    // If we are already running (e.g. from Shop), this just resets logic state.
+    // If not, we start.
     if (!this.isRunning) {
         this.start();
     }
@@ -123,11 +130,15 @@ export class GameEngine {
 
   private loop = (timestamp: number) => {
     if (!this.isRunning) return;
-    const dt = (timestamp - this.lastTime) / 1000;
+    
+    // Calculate Delta Time
+    const dtRaw = (timestamp - this.lastTime) / 1000;
     this.lastTime = timestamp;
-    const safeDt = Math.min(dt, 0.1);
+    
+    // CRITICAL FIX: Clamp dt to max 0.1s to prevent huge jumps (tab switching/lag)
+    const dt = Math.min(dtRaw, 0.1);
 
-    this.update(safeDt, timestamp);
+    this.update(dt, timestamp);
     this.draw();
 
     this.animationId = requestAnimationFrame(this.loop);
@@ -143,30 +154,32 @@ export class GameEngine {
 
     // 2. Logic Updates - Timer Countdown
     this.waveTime -= dt;
-    if (this.waveTime < 0) this.waveTime = 0;
+    // Don't clamp strictly to 0 here to allow last-second spawns, checking <= 0 later
 
     this.spawnEnemies(dt, store.stats.wave);
     this.updateUnits(dt, store.gridUnits);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
-    this.updateLoot(dt); // FIX: Hero targeting
-    this.updateFloatingText(dt); // FIX: Cleanup
+    this.updateLoot(dt); // FIX: Hero targeting check inside
+    this.updateFloatingText(dt); // FIX: Cleanup check inside
 
     // Throttled Timer Update (Prevent React flooding)
     if (timestamp - this.lastTimerUpdate > 1000) {
-        this.callbacks?.onTimeUpdate?.(Math.ceil(this.waveTime));
+        this.callbacks?.onTimeUpdate?.(Math.ceil(Math.max(0, this.waveTime)));
         this.lastTimerUpdate = timestamp;
     }
 
-    // End Conditions
+    // End Conditions - Game Over
     if (this.enemies.some(e => e.x < 0)) {
         store.setPhase(GamePhase.GAME_OVER);
         this.stop();
         return;
     }
 
-    // Wave End: Time is up AND no enemies left
+    // End Conditions - Wave End
+    // Time must be up AND no enemies left
     if (this.waveTime <= 0 && this.enemies.length === 0) {
+        this.waveTime = 0; // Clamp visual
         store.resetWaveState(); 
         this.enemies = [];
         this.projectiles = [];
@@ -535,6 +548,7 @@ export class GameEngine {
       } else {
         // 1. BASE DRAW (Always Opaque)
         this.ctx.globalAlpha = 1.0;
+        this.ctx.globalCompositeOperation = 'source-over'; // Strict reset
         this.ctx.fillStyle = 'white'; // Prevent color pollution
         this.ctx.fillText(u.emoji, 0, 0);
 
@@ -593,6 +607,7 @@ export class GameEngine {
         
         // 1. BASE DRAW (Always Opaque)
         this.ctx.globalAlpha = 1.0;
+        this.ctx.globalCompositeOperation = 'source-over'; // Strict Reset
         this.ctx.fillStyle = 'white';
         this.ctx.fillText(e.emoji, 0, 0);
 
