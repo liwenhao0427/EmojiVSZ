@@ -2,7 +2,6 @@
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
-// FIX: `GRID_OFFSET_X` was not imported, causing a reference error.
 import { GRID_ROWS, GRID_OFFSET_Y, CANVAS_WIDTH, CELL_SIZE, GRID_OFFSET_X } from '../../../constants';
 import { useGameStore } from '../../../store/useGameStore';
 import { GamePhase } from '../../../types';
@@ -10,25 +9,27 @@ import { ENEMY_DATA } from '../../../data/enemies';
 import { WAVE_DATA } from '../../../data/waves';
 
 export class EnemySystem implements System {
-  // State for wave management
-  private spawnQueue: string[] = [];
-  private bucketSpawnCounts: number[] = [];
-  private currentBucketIndex: number = 0;
-  private timeInBucket: number = 0;
-  private readonly bucketDuration: number = 10;
-  private bucketSpawnTimer: number = 0;
-  
+  // New state for wave management
+  private waveElapsedTime: number = 0;
+  private trickleQueue: string[] = [];
+  private burstSchedule: { time: number; enemies: string[] }[] = [];
+  private nextBurstIndex: number = 0;
+  private trickleSpawnTimer: number = 0;
+  private trickleInterval: number = 0;
+
   update(dt: number, gameState: GameState, callbacks: EngineCallbacks) {
     this.spawnEnemies(dt, gameState);
     this.updateEnemies(dt, gameState, callbacks);
   }
 
   public prepareWave(waveNumber: number) {
-    this.spawnQueue = [];
-    this.bucketSpawnCounts = [];
-    this.currentBucketIndex = 0;
-    this.timeInBucket = 0;
-    this.bucketSpawnTimer = 0;
+    // Reset state for the new wave
+    this.burstSchedule = [];
+    this.trickleQueue = [];
+    this.waveElapsedTime = 0;
+    this.nextBurstIndex = 0;
+    this.trickleSpawnTimer = 0;
+    this.trickleInterval = 0;
 
     const config = WAVE_DATA.find(w => w.wave === waveNumber) || WAVE_DATA[WAVE_DATA.length - 1];
     if (!config) return;
@@ -36,116 +37,115 @@ export class EnemySystem implements System {
     const store = useGameStore.getState();
     const enemyCountModifier = 1 + ((store.stats.enemy_count || 0) / 100);
     
-    let tempQueue: string[] = [];
-    let specialUnits: string[] = [];
-    let totalNormalWeight = 0;
-    
-    // Separate normal/special enemies and calculate total weight of normal units
+    // 1. Generate the total list of enemies for the wave
+    let totalSpawnQueue: string[] = [];
     for (const id in config.composition) {
-        const enemyType = ENEMY_DATA[id];
-        if (enemyType.type === 'ELITE' || enemyType.type === 'BOSS' || enemyType.type === 'SPECIAL') {
-            for (let i = 0; i < config.composition[id]; i++) {
-                specialUnits.push(id);
-            }
-        } else {
-            totalNormalWeight += config.composition[id];
-        }
-    }
-
-    const finalNormalCount = Math.round(config.totalCount * enemyCountModifier);
-
-    if (totalNormalWeight > 0) {
-        for (const id in config.composition) {
-            const enemyType = ENEMY_DATA[id];
-            if (enemyType.type === 'NORMAL') {
-                const weight = config.composition[id];
-                const count = Math.round((weight / totalNormalWeight) * finalNormalCount);
-                for (let i = 0; i < count; i++) {
-                    tempQueue.push(id);
-                }
-            }
+        const count = Math.round(config.totalCount * config.composition[id] * enemyCountModifier);
+        for (let i = 0; i < count; i++) {
+            totalSpawnQueue.push(id);
         }
     }
     
-    tempQueue.push(...specialUnits);
-    
-    // Shuffle queue for randomness
-    for (let i = tempQueue.length - 1; i > 0; i--) {
+    // 2. Shuffle queue for randomness in enemy types
+    for (let i = totalSpawnQueue.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [tempQueue[i], tempQueue[j]] = [tempQueue[j], tempQueue[i]];
-    }
-
-    this.spawnQueue = tempQueue;
-
-    // Distribute into buckets
-    const totalToSpawn = this.spawnQueue.length;
-    const numBuckets = Math.floor(config.duration / this.bucketDuration);
-    const percentages = [0.10, 0.15, 0.20, 0.25];
-    let assignedCount = 0;
-    
-    for (let i = 0; i < numBuckets - 1; i++) {
-        if (assignedCount >= totalToSpawn) break;
-        const percentage = percentages[i] || percentages[percentages.length-1];
-        const countForBucket = Math.floor(totalToSpawn * percentage);
-        this.bucketSpawnCounts.push(countForBucket);
-        assignedCount += countForBucket;
+      [totalSpawnQueue[i], totalSpawnQueue[j]] = [totalSpawnQueue[j], totalSpawnQueue[i]];
     }
     
-    this.bucketSpawnCounts.push(totalToSpawn - assignedCount); // Last bucket gets the rest
+    const totalToSpawn = totalSpawnQueue.length;
+    
+    // 3. Dynamically schedule bursts based on wave duration
+    const BURST_INTERVAL = 10;
+    const TOTAL_BURST_PERCENTAGE = 0.90;
+    const SLOPE_MODIFIER = 0.05; // Controls the steepness of the ramp (e.g., 0.05 means +/- 5% from the average)
+
+    const numBursts = Math.floor(config.duration / BURST_INTERVAL);
+
+    if (numBursts > 0) {
+        const basePercentPerBurst = TOTAL_BURST_PERCENTAGE / numBursts;
+        
+        for (let i = 0; i < numBursts; i++) {
+            // Create a ramp from -1 to 1 to make spawn rates increase over time
+            const ramp = (numBursts > 1) ? (i / (numBursts - 1)) * 2 - 1 : 0;
+            const percentForThisBurst = basePercentPerBurst + (ramp * SLOPE_MODIFIER);
+            const countForThisBurst = Math.floor(totalToSpawn * percentForThisBurst);
+
+            this.burstSchedule.push({
+                time: i * BURST_INTERVAL,
+                enemies: totalSpawnQueue.splice(0, countForThisBurst)
+            });
+        }
+    } else {
+        // Fallback for very short waves: put 90% in an immediate burst
+        const burstCount = Math.floor(totalToSpawn * TOTAL_BURST_PERCENTAGE);
+        this.burstSchedule.push({
+            time: 0,
+            enemies: totalSpawnQueue.splice(0, burstCount)
+        });
+    }
+
+    // 4. Anything left in the queue is for trickling
+    this.trickleQueue = totalSpawnQueue;
+    if (this.trickleQueue.length > 0) {
+        this.trickleInterval = config.duration / this.trickleQueue.length;
+        this.trickleSpawnTimer = Math.random() * this.trickleInterval;
+    }
   }
 
   private spawnEnemies(dt: number, gameState: GameState) {
-    if (this.spawnQueue.length === 0 || this.currentBucketIndex >= this.bucketSpawnCounts.length) {
-      return;
+    this.waveElapsedTime += dt;
+
+    // Check for and execute scheduled bursts
+    if (this.nextBurstIndex < this.burstSchedule.length && this.waveElapsedTime >= this.burstSchedule[this.nextBurstIndex].time) {
+        const burst = this.burstSchedule[this.nextBurstIndex];
+        burst.enemies.forEach(enemyId => this.spawnSingleEnemy(enemyId, gameState));
+        this.nextBurstIndex++;
     }
 
-    this.timeInBucket += dt;
-
-    const currentBucketCount = this.bucketSpawnCounts[this.currentBucketIndex];
-    if (currentBucketCount > 0) {
-      this.bucketSpawnTimer -= dt;
-      if (this.bucketSpawnTimer <= 0) {
-        const spawnInterval = this.bucketDuration / currentBucketCount;
-        this.bucketSpawnTimer = spawnInterval * (0.8 + Math.random() * 0.4);
-
-        const enemyId = this.spawnQueue.pop();
-        if (enemyId) {
-          const typeData = ENEMY_DATA[enemyId];
-          const wave = useGameStore.getState().stats.wave;
-          
-          gameState.enemies.push({
-            id: Math.random(),
-            x: CANVAS_WIDTH + 50,
-            y: GRID_OFFSET_Y + (Math.floor(Math.random() * GRID_ROWS) * CELL_SIZE) + (CELL_SIZE / 2),
-            radius: 24 * typeData.scale,
-            markedForDeletion: false,
-            hp: typeData.baseHp + typeData.hpPerWave * (wave - 1),
-            maxHp: typeData.baseHp + typeData.hpPerWave * (wave - 1),
-            speed: typeData.speed,
-            emoji: typeData.emoji,
-            description: typeData.name,
-            type: typeData.type as any,
-            damage: typeData.damage,
-            row: Math.floor(Math.random() * GRID_ROWS),
-            attackTimer: 0,
-            isAttacking: false,
-            frozen: 0,
-            hitFlash: 0,
-            name: typeData.id,
-            attackState: 'IDLE',
-            attackProgress: 0,
-            slowTimer: 0,
-            slowMultiplier: 1,
-          });
+    // Handle the continuous trickle of remaining enemies
+    if (this.trickleQueue.length > 0) {
+        this.trickleSpawnTimer -= dt;
+        if (this.trickleSpawnTimer <= 0) {
+            const enemyId = this.trickleQueue.shift(); // Use shift for FIFO trickle
+            if (enemyId) this.spawnSingleEnemy(enemyId, gameState);
+            this.trickleSpawnTimer += this.trickleInterval;
         }
-      }
-    }
-    
-    if (this.timeInBucket >= this.bucketDuration && this.currentBucketIndex < this.bucketSpawnCounts.length - 1) {
-      this.timeInBucket = 0;
-      this.currentBucketIndex++;
     }
   }
+  
+  private spawnSingleEnemy(enemyId: string, gameState: GameState) {
+    if (!enemyId) return;
+    const typeData = ENEMY_DATA[enemyId];
+    if (!typeData) return;
+    
+    const wave = useGameStore.getState().stats.wave;
+    
+    gameState.enemies.push({
+      id: Math.random(),
+      x: CANVAS_WIDTH + 50,
+      y: GRID_OFFSET_Y + (Math.floor(Math.random() * GRID_ROWS) * CELL_SIZE) + (CELL_SIZE / 2),
+      radius: 24 * typeData.scale,
+      markedForDeletion: false,
+      hp: typeData.baseHp + typeData.hpPerWave * (wave - 1),
+      maxHp: typeData.baseHp + typeData.hpPerWave * (wave - 1),
+      speed: typeData.speed,
+      emoji: typeData.emoji,
+      description: typeData.name,
+      type: typeData.type as any,
+      damage: typeData.damage,
+      row: Math.floor(Math.random() * GRID_ROWS),
+      attackTimer: 0,
+      isAttacking: false,
+      frozen: 0,
+      hitFlash: 0,
+      name: typeData.id,
+      attackState: 'IDLE',
+      attackProgress: 0,
+      slowTimer: 0,
+      slowMultiplier: 1,
+    });
+  }
+
 
   private updateEnemies(dt: number, gameState: GameState, callbacks: EngineCallbacks) {
     const store = useGameStore.getState();
@@ -174,30 +174,27 @@ export class EnemySystem implements System {
 
       e.x -= currentSpeed * dt;
 
-      if (e.x < GRID_OFFSET_X) { // Changed from 0 to GRID_OFFSET_X for defense line
+      if (e.x < GRID_OFFSET_X) {
         callbacks.onGameOver?.();
         store.setPhase(GamePhase.GAME_OVER);
         return; 
       }
 
-      // Collision and attacking logic
-      if (e.name !== 'fly') { // Flying units ignore collision
-        const unitInCell = store.gridUnits.find(u => 
-          !u.isDead && u.row === e.row && 
-          Math.abs(e.x - (GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE / 2)) < (CELL_SIZE / 2 + e.radius)
-        );
+      const unitInCell = store.gridUnits.find(u => 
+        !u.isDead && u.row === e.row && 
+        Math.abs(e.x - (GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE / 2)) < (CELL_SIZE / 2 + e.radius)
+      );
 
-        if (unitInCell) {
-          e.attackTimer -= dt;
-          if (e.attackTimer <= 0) {
-            store.damageUnit(unitInCell.id, e.damage);
-            callbacks.onUnitDamaged?.(unitInCell.id);
-            e.attackTimer = 1.0;
-            e.attackState = 'ATTACKING';
-            e.attackProgress = 0;
-          }
-          e.x += currentSpeed * dt; // Stand still by moving back
+      if (unitInCell) {
+        e.attackTimer -= dt;
+        if (e.attackTimer <= 0) {
+          store.damageUnit(unitInCell.id, e.damage);
+          callbacks.onUnitDamaged?.(unitInCell.id);
+          e.attackTimer = 1.0;
+          e.attackState = 'ATTACKING';
+          e.attackProgress = 0;
         }
+        e.x += currentSpeed * dt;
       }
     });
     

@@ -1,6 +1,6 @@
 
+
 import React from 'react';
-import { TEMP_UNIT_POOL } from '../constants';
 import { PlayerStats, DraftOption, Unit, WeaponClass, UnitData } from '../types';
 import { Sparkles, Sword, Zap } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -32,10 +32,6 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level }) =
   React.useEffect(() => {
     // 1. Create a combined pool of units for draft
     const allUnitOptions: Partial<Unit>[] = [
-      // Higher chance for dedicated temp units
-      ...TEMP_UNIT_POOL,
-      ...TEMP_UNIT_POOL,
-      // Add all buyable units as potential temp units
       ...Object.values(UNIT_DATA).map(unitDataToDraftUnit)
     ];
 

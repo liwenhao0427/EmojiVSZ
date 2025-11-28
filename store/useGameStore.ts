@@ -1,7 +1,8 @@
 
+
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem } from '../types';
-import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS, TEMP_UNIT_POOL } from '../constants';
+import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 import { ITEMS_DATA } from '../data/items';
 import { UNIT_DATA } from '../data/units';
@@ -105,7 +106,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     
     const starters: Unit[] = [heroUnit];
-    const peashooterData = UNIT_DATA['peashooter'];
+    const peashooterData = UNIT_DATA['豌豆射手'];
     if (peashooterData) {
         const positions = [[0, 1], [1, 1], [3, 1], [4, 1]];
         positions.forEach(([r, c]) => {
@@ -131,9 +132,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     set({
-      stats: { ...INITIAL_STATS, wave: 0, gold: 10, heroLevel: 1 }, 
+      stats: { ...INITIAL_STATS, wave: 1, gold: 10, heroLevel: 1 }, 
       gridUnits: starters,
-      phase: GamePhase.START,
+      phase: GamePhase.COMBAT,
       draftOptions: [],
       inspectedEntity: null,
       ownedItems: {},

@@ -1,4 +1,5 @@
 
+
 import { PlayerStats, Unit, Rarity } from './types';
 
 export const CANVAS_WIDTH = 1200; 
@@ -64,7 +65,7 @@ export const HERO_UNIT: Unit = {
   name: 'Keyboard Warrior',
   emoji: '🦸‍♂️',
   description: 'The commander. Gains energy over time to unleash a powerful ultimate attack. Its attack pattern can be upgraded.',
-  type: 'MAGIC',
+  type: 'RANGED',
   damage: 25, // DPS equivalent to ~5 starting units
   range: 9999, 
   cooldown: 0,
@@ -78,13 +79,6 @@ export const HERO_UNIT: Unit = {
   isDead: false,
   attackType: 'LINEAR',
 };
-
-// Temp Units for Draft
-export const TEMP_UNIT_POOL: Partial<Unit>[] = [
-  { name: "Cannon", emoji: '💣', type: 'ENGINEERING', damage: 50, maxCooldown: 2.5, hp: 100, range: 1200, maxHp: 100, description: 'Fires a high-damage explosive shell at a slow rate.' },
-  { name: "Sniper Bot", emoji: '🔭', type: 'RANGED', damage: 100, maxCooldown: 4.0, hp: 50, range: 2000, maxHp: 50, description: 'Extremely long range and high damage, but very slow fire rate.' },
-  { name: "Berzerker", emoji: '👺', type: 'MELEE', damage: 40, maxCooldown: 0.5, hp: 200, range: 150, maxHp: 200, description: 'A furious melee attacker with a very fast attack speed.' },
-];
 
 export const AMMO_TYPE_MAP: Record<string, string> = {
   BULLET: 'Bullet',

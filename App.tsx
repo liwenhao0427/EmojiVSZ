@@ -1,7 +1,7 @@
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/engine';
-import { StartScreen } from './components/StartScreen';
 import { LevelUpModal } from './components/LevelUpModal';
 import { GameOverScreen } from './components/GameOverScreen';
 import { Shop } from './components/Shop';
@@ -109,10 +109,6 @@ export default function App() {
     waveStartedRef.current = 0;
   };
 
-  const handleStartGame = () => {
-    startNextWave();
-  };
-
   const handleDraftSelect = (option: DraftOption) => {
       applyDraft(option);
       setShowLevelUp(false);
@@ -145,7 +141,6 @@ export default function App() {
         )}
 
         {/* Modals & Screens */}
-        {phase === GamePhase.START && <StartScreen onStart={handleStartGame} />}
         
         {/* Level Up Overlay (Triggers on XP Threshold) */}
         {showLevelUp && (

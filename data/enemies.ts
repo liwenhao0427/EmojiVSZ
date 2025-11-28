@@ -17,7 +17,6 @@ export interface EnemyData {
 
 export const ENEMY_DATA: Record<string, EnemyData> = {
     "baby_alien": { "id": "baby_alien", "name": "外星幼崽", "emoji": "👾", "type": "NORMAL", "baseHp": 20, "hpPerWave": 2, "speed": 100, "damage": 5, "materials": 1, "scale": 0.8 },
-    "fly": { "id": "fly", "name": "烦人苍蝇", "emoji": "🦟", "type": "NORMAL", "baseHp": 8, "hpPerWave": 2, "speed": 160, "damage": 5, "materials": 1, "scale": 0.6 },
     "chaser": { "id": "chaser", "name": "追逐者", "emoji": "🐛", "type": "NORMAL", "baseHp": 12, "hpPerWave": 2, "speed": 190, "damage": 8, "materials": 1, "scale": 0.9 },
     "spitter": { "id": "spitter", "name": "喷吐者", "emoji": "🐡", "type": "NORMAL", "baseHp": 15, "hpPerWave": 3, "speed": 90, "damage": 8, "materials": 2, "isRanged": true, "scale": 1.0 },
     "helmet_alien": { "id": "helmet_alien", "name": "头盔怪", "emoji": "💂", "type": "NORMAL", "baseHp": 25, "hpPerWave": 3, "speed": 100, "damage": 10, "materials": 2, "armor": 3, "scale": 1.1 },
