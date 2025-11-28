@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { PlayerStats, DraftOption, Unit, WeaponClass, UnitData } from '../types';
 import { Sparkles, Sword, Zap } from 'lucide-react';
@@ -23,6 +22,8 @@ const unitDataToDraftUnit = (w: UnitData): Partial<Unit> => ({
     range: w.range,
     description: `一个临时的 ${w.name}，仅在本波次生效。`,
     effects: w.effect,
+    attackPattern: w.attackPattern,
+    projectileEmoji: w.projectileEmoji,
 });
 
 

@@ -77,9 +77,12 @@ export class UnitSystem implements System {
         validEnemies = gameState.enemies.filter(e => Math.hypot(e.x - unitX, e.y - unitY) <= u.range);
       }
       
+      // 修复：如果没有敌人在范围内，不进行攻击，也不消耗冷却
+      if (validEnemies.length === 0) return;
+
       const target = validEnemies.sort((a,b) => Math.hypot(a.x - unitX, a.y - unitY) - Math.hypot(b.x - unitX, b.y - unitY))[0];
 
-      // Attack unconditionally if cooldown is ready.
+      // Attack if cooldown is ready and target exists
       const damage = this.calculateFinalDamage(u, store.stats);
 
       switch (u.attackPattern) {
