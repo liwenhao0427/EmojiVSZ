@@ -1,5 +1,6 @@
 
 
+
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
 export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -80,6 +81,9 @@ export interface PlayerStats {
   // New hero-specific stats for upgrades
   heroEnergyGainRate?: number;
   heroMaxEnergy?: number;
+  
+  // Index signature for dynamic item effects
+  [key: string]: number | undefined;
 }
 
 export enum GamePhase {
@@ -180,20 +184,21 @@ export interface AmmoItem {
 
 export type AmmoBayState = Record<string, AmmoItem[]>;
 
-export interface ItemUpgrade {
+export interface BrotatoItem {
   id: string;
   name: string;
-  description: string;
-  rarity: Rarity;
-  stats: Partial<PlayerStats>;
-  bought?: boolean;
-  locked?: boolean;
+  tier: number;
+  price: number;
+  desc: string;
+  stats?: Record<string, number>;
+  effect?: Record<string, number>;
+  max?: number;
 }
 
 export interface ShopItem {
   id: string;
   type: 'WEAPON' | 'ITEM';
-  data: AmmoItem | ItemUpgrade;
+  data: AmmoItem | BrotatoItem;
   price: number;
   locked: boolean;
   bought: boolean;

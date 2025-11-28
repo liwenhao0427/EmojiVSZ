@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useLayoutEffect } from 'react';
-import { GameEngine } from '../services/GameEngine';
+// FIX: The import path for GameEngine was incorrect. It should point to the 'engine' directory which exports the GameEngine class.
+import { GameEngine } from '../services/engine';
 import { PlayerStats, AmmoBayState, GamePhase } from '../types';
 import { INITIAL_STATS } from '../constants';
 
@@ -37,12 +38,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Instantiate Engine
     engineRef.current = new GameEngine(
       canvasRef.current,
-      stats, // Initial stats
+      // FIX: The GameEngine constructor signature has changed. It now takes callbacks as the second argument.
+      // The engine now pulls state from the global store instead of having it passed in.
+      // Invalid callbacks for the new engine are not passed.
       {
-        onDamagePlayer,
         onGainLoot,
         onWaveEnd,
-        onLootGoblinKill
       }
     );
 
@@ -50,27 +51,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // If we mount in Combat phase (e.g. restart), start immediately
     if (phase === GamePhase.COMBAT) {
         engineRef.current.startWave(waveDuration, currentWave);
-        engineRef.current.updateAmmo(ammoState);
     }
-
-    // Input Handling
-    const handleMouseMove = (e: MouseEvent) => engineRef.current?.updateMouse(e.clientX, e.clientY);
-    window.addEventListener('mousemove', handleMouseMove);
+    
+    // FIX: The new InputSystem handles its own event listeners.
 
     return () => {
       engineRef.current?.cleanup();
-      window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, []); // Run once on mount (key change in parent triggers remount)
+  }, []); // Run once on mount
 
-  // --- Sync Data ---
-  useEffect(() => {
-    engineRef.current?.updateStats(stats);
-  }, [stats]);
-
-  useEffect(() => {
-    engineRef.current?.updateAmmo(ammoState);
-  }, [ammoState]);
+  // FIX: These effects are deprecated as the engine now reads state directly from the global store.
 
   // --- Resize Handling ---
   useLayoutEffect(() => {
@@ -80,7 +70,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const { clientWidth, clientHeight } = containerRef.current;
         canvasRef.current.width = clientWidth;
         canvasRef.current.height = clientHeight;
-        engineRef.current?.resize(clientWidth, clientHeight);
+        // FIX: The new GameEngine does not have a `resize` method and is designed for a fixed-size canvas.
     };
     const observer = new ResizeObserver(updateSize);
     observer.observe(containerRef.current);

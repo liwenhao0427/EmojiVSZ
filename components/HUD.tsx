@@ -1,5 +1,6 @@
 
 
+
 import React, { useState } from 'react';
 import { PlayerStats } from '../types';
 import { Zap, Shield, Swords, Crosshair, Wind, Clover, Menu, Magnet, GraduationCap, Coins } from 'lucide-react';
@@ -10,16 +11,47 @@ interface HUDProps {
   currentWave: number;
 }
 
-const StatRow = ({ icon: Icon, label, value, color }: any) => (
-    <div className="flex justify-between items-center text-xs py-1 border-b border-white/5 last:border-0">
-        <span className="flex items-center gap-2 text-gray-400"><Icon size={12} className={color}/> {label}</span>
-        <span className={`font-mono font-bold ${color}`}>{value}</span>
-    </div>
-);
+const STAT_DISPLAY_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; isPercent?: boolean, isFloat?: boolean }> = {
+    damagePercent: { label: 'Damage', icon: Swords, color: 'text-red-400', isPercent: true },
+    attackSpeed: { label: 'Atk Speed', icon: Wind, color: 'text-yellow-400', isPercent: true },
+    critChance: { label: 'Crit Chance', icon: Crosshair, color: 'text-orange-400', isPercent: true, isFloat: true },
+    luck: { label: 'Luck', icon: Clover, color: 'text-green-400' },
+    xpGain: { label: 'XP Gain', icon: GraduationCap, color: 'text-purple-400', isPercent: true, isFloat: true },
+    meleeDmg: { label: 'Melee Dmg', icon: Swords, color: 'text-red-300' },
+    rangedDmg: { label: 'Ranged Dmg', icon: Swords, color: 'text-blue-300' },
+    elementalDmg: { label: 'Elemental Dmg', icon: Swords, color: 'text-purple-300' },
+    engineering: { label: 'Engineering', icon: Swords, color: 'text-gray-300' },
+    enemy_count: { label: 'Enemy Count', icon: Zap, color: 'text-pink-400', isPercent: true },
+    explosion_dmg: { label: 'Explosion Dmg', icon: Zap, color: 'text-orange-500', isPercent: true},
+    burn_chance: { label: 'Burn Chance', icon: Zap, color: 'text-red-500', isPercent: true},
+};
+
+
+const StatRow: React.FC<{ statKey: string; value: number }> = ({ statKey, value }) => {
+    const config = STAT_DISPLAY_CONFIG[statKey];
+    if (!config) return null;
+
+    let displayValue: string;
+    if (config.isPercent) {
+        const displayVal = config.isFloat ? value * 100 : value;
+        displayValue = `${displayVal >= 0 ? '+' : ''}${displayVal.toFixed(0)}%`;
+    } else {
+        displayValue = `${value >= 0 ? '+' : ''}${value.toFixed(0)}`;
+    }
+
+    return (
+        <div className="flex justify-between items-center text-xs py-1 border-b border-white/5 last:border-0">
+            <span className="flex items-center gap-2 text-gray-400"><config.icon size={12} className={config.color}/> {config.label}</span>
+            <span className={`font-mono font-bold ${config.color}`}>{displayValue}</span>
+        </div>
+    );
+};
 
 export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
   const xpPct = (stats.xp / stats.maxXp) * 100;
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const displayedStats = Object.keys(STAT_DISPLAY_CONFIG).filter(key => stats[key] && stats[key] !== 0);
 
   return (
     <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
@@ -78,13 +110,10 @@ export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
                     ${isExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}
                 `}>
                      <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest border-b border-white/10 pb-1">Combat Attributes</h3>
-                     <StatRow icon={Swords} label="Damage" value={`+${stats.damagePercent}%`} color="text-red-400" />
-                     <StatRow icon={Wind} label="Atk Spd" value={`+${stats.attackSpeed}%`} color="text-yellow-400" />
-                     <StatRow icon={Crosshair} label="Crit" value={`${(stats.critChance*100).toFixed(0)}%`} color="text-orange-400" />
-                     <StatRow icon={Wind} label="Speed" value={`${stats.speed}%`} color="text-cyan-400" />
-                     <StatRow icon={Clover} label="Luck" value={stats.luck} color="text-green-400" />
-                     <StatRow icon={Magnet} label="Pickup" value={`+${(stats.pickupRange*100).toFixed(0)}%`} color="text-indigo-400" />
-                     <StatRow icon={GraduationCap} label="XP Gain" value={`+${(stats.xpGain*100).toFixed(0)}%`} color="text-purple-400" />
+                     {displayedStats.map(key => (
+                        <StatRow key={key} statKey={key} value={stats[key]!} />
+                     ))}
+                     {displayedStats.length === 0 && <p className="text-xs text-gray-500 text-center py-2">No active bonuses.</p>}
                 </div>
             </div>
         </div>

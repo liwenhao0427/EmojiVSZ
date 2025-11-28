@@ -1,6 +1,5 @@
 
-
-import { PlayerStats, Unit } from './types';
+import { PlayerStats, Unit, Rarity } from './types';
 
 export const CANVAS_WIDTH = 1200; 
 export const CANVAS_HEIGHT = 800; 
@@ -52,6 +51,14 @@ export const RARITY_COLORS: Record<string, string> = {
   LEGENDARY: '#ef4444'
 };
 
+export const TIER_TO_RARITY: Record<number, Rarity> = {
+  1: 'COMMON',
+  2: 'RARE',
+  3: 'EPIC',
+  4: 'LEGENDARY'
+};
+
+
 export const HERO_UNIT: Unit = {
   id: 'hero',
   name: 'Keyboard Warrior',
@@ -79,21 +86,6 @@ export const TEMP_UNIT_POOL: Partial<Unit>[] = [
   { name: "Berzerker", emoji: '👺', type: 'MELEE', damage: 40, maxCooldown: 0.5, hp: 200, range: 150, maxHp: 200, description: 'A furious melee attacker with a very fast attack speed.' },
 ];
 
-export const ENEMY_TYPES = [
-  { id: 'troll', emoji: '🤡', hp: 30, speed: 40, damage: 5, type: 'NORMAL', description: 'A standard, numerous foe. Weak but annoying.' },
-  { id: 'hater', emoji: '😡', hp: 60, speed: 30, damage: 10, type: 'NORMAL', description: 'Slightly tougher than a troll, with more health.' },
-  { id: 'bot', emoji: '🤖', hp: 120, speed: 20, damage: 15, type: 'ELITE', description: 'A durable elite unit that can absorb significant damage.' },
-  { id: 'boss', emoji: '👹', hp: 1000, speed: 15, damage: 50, type: 'BOSS', description: 'A massive threat. Extremely high health and damage.' },
-];
-
-export const WAVE_CONFIG = [
-  { wave: 1, duration: 30, interval: 2.5, enemies: ['troll'] },
-  { wave: 2, duration: 35, interval: 2.0, enemies: ['troll', 'hater'] },
-  { wave: 3, duration: 40, interval: 1.8, enemies: ['troll', 'hater', 'bot'] },
-  { wave: 4, duration: 45, interval: 1.2, enemies: ['hater', 'bot'] },
-  { wave: 5, duration: 60, interval: 0.8, enemies: ['troll', 'hater', 'bot', 'boss'] },
-];
-
 export const AMMO_TYPE_MAP: Record<string, string> = {
   BULLET: 'Bullet',
   ROCKET: 'Rocket',
@@ -110,15 +102,8 @@ export const KEYWORD_DEFINITIONS: Record<string, string> = {
 };
 
 export const WEAPON_POOL = [
-  { name: "Pistol", emoji: '🔫', rarity: 'COMMON', type: 'BULLET', damage: 10, cooldown: 1.0, speed: 20, weaponClass: 'RANGED' },
-  { name: "Wand", emoji: '🪄', rarity: 'RARE', type: 'MAGIC', damage: 15, cooldown: 1.5, speed: 15, weaponClass: 'MAGIC' },
-  { name: "Sword", emoji: '⚔️', rarity: 'COMMON', type: 'MELEE', damage: 20, cooldown: 0.8, speed: 0, weaponClass: 'MELEE' },
-  { name: "Turret", emoji: '📡', rarity: 'EPIC', type: 'ENGINEERING', damage: 8, cooldown: 0.3, speed: 30, weaponClass: 'ENGINEERING' },
-];
-
-export const ITEM_POOL = [
-  { name: "Scope", rarity: 'RARE', description: "+10% Range", stats: { pickupRange: 0.1 } },
-  { name: "Coffee", rarity: 'COMMON', description: "+10% Atk Speed", stats: { attackSpeed: 10 } },
-  { name: "Dumbbell", rarity: 'COMMON', description: "+5% Damage", stats: { damagePercent: 5 } },
-  { name: "Lucky Charm", rarity: 'EPIC', description: "+20 Luck", stats: { luck: 20 } },
+  { id: "pistol", name: "Pistol", emoji: '🔫', rarity: 'COMMON', type: 'BULLET', damage: 10, cooldown: 1.0, speed: 20, weaponClass: 'RANGED' },
+  { id: "wand", name: "Wand", emoji: '🪄', rarity: 'RARE', type: 'MAGIC', damage: 15, cooldown: 1.5, speed: 15, weaponClass: 'MAGIC' },
+  { id: "sword", name: "Sword", emoji: '⚔️', rarity: 'COMMON', type: 'MELEE', damage: 20, cooldown: 0.8, speed: 0, weaponClass: 'MELEE' },
+  { id: "turret", name: "Turret", emoji: '📡', rarity: 'EPIC', type: 'ENGINEERING', damage: 8, cooldown: 0.3, speed: 30, weaponClass: 'ENGINEERING' },
 ];

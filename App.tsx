@@ -1,47 +1,48 @@
 
-
 import React, { useEffect, useRef, useState } from 'react';
-import { GameEngine } from './services/GameEngine';
+import { GameEngine } from './services/engine';
 import { StartScreen } from './components/StartScreen';
 import { LevelUpModal } from './components/LevelUpModal';
 import { GameOverScreen } from './components/GameOverScreen';
 import { Shop } from './components/Shop';
 import { useGameStore } from './store/useGameStore';
-import { GamePhase, DraftOption, InspectableEntity } from './types';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, WAVE_CONFIG, INITIAL_STATS } from './constants';
+import { GamePhase, DraftOption, InspectableEntity, BrotatoItem } from './types';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, INITIAL_STATS } from './constants';
+import { WAVE_DATA } from './data/waves';
 import { HUD } from './components/HUD';
 import { InspectorPanel } from './components/InspectorPanel';
+import { InventoryPanel } from './components/InventoryPanel';
 
 export default function App() {
-  const { phase, setPhase, initGame, stats, startNextWave, applyDraft } = useGameStore();
+  const { phase, setPhase, initGame, stats, startNextWave, applyDraft, setInspectedEntity, buyBrotatoItem } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const waveStartedRef = useRef(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
-  const [inspectedEntity, setInspectedEntity] = useState<InspectableEntity>(null);
+
+  // Subscribe to inspected entity changes from the store
+  const inspectedEntity = useGameStore(state => state.inspectedEntity);
 
   // Initial load
   useEffect(() => {
     initGame();
-  }, []);
+  }, [initGame]);
 
   useEffect(() => {
     if (canvasRef.current && !engineRef.current) {
       engineRef.current = new GameEngine(
         canvasRef.current,
-        undefined,
         {
           onTimeUpdate: (t) => setTimeLeft(t),
           onGainLoot: (xp, gold) => {
               const store = useGameStore.getState();
               
-              let newXp = store.stats.xp + xp;
+              let newXp = store.stats.xp + xp * (store.stats.xpGain || 1.0);
               let newMaxXp = store.stats.maxXp;
               let newLevel = store.stats.level;
               let didLevelUp = false;
 
-              // Check Level Up Logic
               if (newXp >= newMaxXp) {
                   newXp -= newMaxXp;
                   newLevel += 1;
@@ -63,9 +64,6 @@ export default function App() {
                   engineRef.current?.stop();
                   setShowLevelUp(true);
               }
-          },
-          onDamagePlayer: (amount) => {
-               // Visual shake only
           },
           onWaveEnd: () => {
               setPhase(GamePhase.SHOP);
@@ -93,10 +91,16 @@ export default function App() {
     // Wave Start
     if (phase === GamePhase.COMBAT && !showLevelUp && waveStartedRef.current !== stats.wave) {
         waveStartedRef.current = stats.wave;
-        const config = WAVE_CONFIG.find(w => w.wave === stats.wave) || WAVE_CONFIG[WAVE_CONFIG.length-1];
+        const config = WAVE_DATA.find(w => w.wave === stats.wave) || WAVE_DATA[WAVE_DATA.length-1];
         engineRef.current?.startWave(config.duration, stats.wave);
     }
-  }, [phase, stats.wave, showLevelUp]);
+    
+    return () => {
+        // On unmount, ensure engine is cleaned up.
+        // This is more of a safety net for strict mode.
+        // engineRef.current?.cleanup(); 
+    }
+  }, [phase, stats.wave, showLevelUp, initGame, setPhase, setInspectedEntity]);
 
   const handleRestart = () => {
     initGame();
@@ -136,11 +140,7 @@ export default function App() {
             <HUD stats={stats} waveTime={timeLeft} currentWave={stats.wave} />
             <InspectorPanel entity={inspectedEntity} />
             
-            <div className="absolute bottom-4 left-4 pointer-events-none z-10">
-                 <div className="bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-2 rounded-lg text-xs text-gray-400">
-                   Drag units to swap positions
-                </div>
-            </div>
+             {phase === GamePhase.SHOP && <InventoryPanel />}
           </>
         )}
 
@@ -157,20 +157,8 @@ export default function App() {
         
         {phase === GamePhase.SHOP && (
             <Shop 
-                stats={stats} 
-                currentWave={stats.wave}
                 onNextWave={startNextWave}
-                onBuyWeapon={() => {}} // Deprecated by addUnit inside Shop
-                onBuyItem={(item) => {
-                     // Apply permanent item stats
-                     const store = useGameStore.getState();
-                     const newStats = { ...store.stats };
-                     Object.entries(item.stats).forEach(([k, v]) => {
-                         (newStats as any)[k] += v;
-                     });
-                     useGameStore.setState({ stats: newStats });
-                }}
-                updateGold={(amount) => { useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold + amount } })) }}
+                onBuyItem={(item) => buyBrotatoItem(item)}
             />
         )}
         

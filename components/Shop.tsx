@@ -1,84 +1,95 @@
 
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { ShopItem, PlayerStats, AmmoItem, ItemUpgrade } from '../types';
-import { WEAPON_POOL, ITEM_POOL, RARITY_COLORS } from '../constants';
-import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown } from 'lucide-react';
+import { ShopItem, BrotatoItem, AmmoItem } from '../types';
+import { WEAPON_POOL, RARITY_COLORS, TIER_TO_RARITY } from '../constants';
+import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown, Package, Sword } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
+import { rollShopItems } from '../services/itemGenerator';
 
 interface ShopProps {
-  stats: PlayerStats;
-  currentWave: number;
-  onBuyWeapon: (weapon: AmmoItem) => void;
-  onBuyItem: (item: ItemUpgrade) => void;
+  onBuyItem: (item: BrotatoItem) => void;
   onNextWave: () => void;
-  updateGold: (amount: number) => void;
 }
 
-export const Shop: React.FC<ShopProps> = ({ stats, currentWave, onBuyItem, onNextWave, updateGold }) => {
-  const { addUnit } = useGameStore();
+export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
+  const { stats, addUnit, ownedItems } = useGameStore();
   const [items, setItems] = useState<ShopItem[]>([]);
   const [rerollCount, setRerollCount] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const rerollCost = 1 + Math.max(0, currentWave - 1) + rerollCount;
+  const rerollCost = 1 + Math.max(0, stats.wave - 1) + rerollCount;
 
   const generateShop = (keepLocked = true) => {
-    const newItems: ShopItem[] = [];
+    let newItems: ShopItem[] = [];
     
     if (keepLocked) {
-        items.forEach(i => {
-            if (i.locked && !i.bought) newItems.push(i);
+        newItems = items.filter(i => i.locked && !i.bought);
+    }
+    
+    const itemsToRoll = 4 - newItems.length;
+    if (itemsToRoll > 0) {
+      const rolledBrotatoItems = rollShopItems(stats.wave, stats.luck, ownedItems, itemsToRoll);
+      
+      rolledBrotatoItems.forEach(item => {
+        const price = Math.round(item.price * (1 - (stats.shopDiscount || 0) / 100));
+        newItems.push({
+          id: uuidv4(),
+          type: 'ITEM',
+          data: item,
+          price,
+          locked: false,
+          bought: false
         });
+      });
     }
 
-    while (newItems.length < 4) {
-        const isWeapon = Math.random() > 0.4;
-        const pool = isWeapon ? WEAPON_POOL : ITEM_POOL;
-        const template = pool[Math.floor(Math.random() * pool.length)];
-        
-        let basePrice = isWeapon ? 20 : 15;
-        if (template.rarity === 'RARE') basePrice *= 2;
-        if (template.rarity === 'EPIC') basePrice *= 4;
-
-        basePrice = Math.max(1, Math.floor(basePrice * (1 - stats.shopDiscount)));
-
+    // Optionally add a weapon
+    if (Math.random() > 0.6 && newItems.length < 4) {
+        const weapon = WEAPON_POOL[Math.floor(Math.random() * WEAPON_POOL.length)];
+        const price = 25 * (1 - (stats.shopDiscount || 0) / 100);
         newItems.push({
             id: uuidv4(),
-            type: isWeapon ? 'WEAPON' : 'ITEM',
-            data: { ...template } as any,
-            price: basePrice,
+            type: 'WEAPON',
+            data: { ...weapon, id: uuidv4() } as AmmoItem,
+            price: Math.round(price),
             locked: false,
             bought: false
         });
     }
-    setItems(newItems);
+
+    setItems(newItems.sort(() => Math.random() - 0.5));
   };
 
   useEffect(() => {
     generateShop(false);
   }, []);
 
-  const handleBuy = (item: ShopItem) => {
-    if (stats.gold >= item.price && !item.bought) {
-        if (item.type === 'WEAPON') {
-            // Try to place unit
-            const placed = addUnit(item.data as AmmoItem);
+  const handleBuy = (shopItem: ShopItem) => {
+    if (stats.gold >= shopItem.price && !shopItem.bought) {
+        if (shopItem.type === 'ITEM') {
+            const itemData = shopItem.data as BrotatoItem;
+            const currentCount = ownedItems[itemData.id] || 0;
+            if (itemData.max && currentCount >= itemData.max) {
+                 setFeedback("Max amount owned!");
+                 setTimeout(() => setFeedback(null), 2000);
+                 return;
+            }
+            onBuyItem(itemData);
+            shopItem.bought = true;
+        } else {
+             const placed = addUnit(shopItem.data as AmmoItem);
             if (placed) {
-                updateGold(-item.price);
-                item.bought = true;
+                useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold - shopItem.price }}));
+                shopItem.bought = true;
                 setFeedback(null);
             } else {
                 setFeedback("GRID FULL! Sell or move units.");
                 setTimeout(() => setFeedback(null), 2000);
             }
-        } else {
-            // Passive Item
-            updateGold(-item.price);
-            item.bought = true;
-            onBuyItem(item.data as ItemUpgrade);
         }
         setItems([...items]); 
     }
@@ -86,7 +97,7 @@ export const Shop: React.FC<ShopProps> = ({ stats, currentWave, onBuyItem, onNex
 
   const handleReroll = () => {
     if (stats.gold >= rerollCost) {
-        updateGold(-rerollCost);
+        useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold - rerollCost }}));
         setRerollCount(prev => prev + 1);
         generateShop(true);
     }
@@ -95,6 +106,8 @@ export const Shop: React.FC<ShopProps> = ({ stats, currentWave, onBuyItem, onNex
   const toggleLock = (id: string) => {
       setItems(prev => prev.map(i => i.id === id ? { ...i, locked: !i.locked } : i));
   };
+  
+  const currentWave = stats.wave;
 
   if (!isVisible) {
       return (
@@ -136,63 +149,73 @@ export const Shop: React.FC<ShopProps> = ({ stats, currentWave, onBuyItem, onNex
         </div>
 
         <div className="grid grid-cols-4 gap-6 flex-1 mb-8">
-            {items.map(item => (
-                <div 
-                    key={item.id}
-                    className={`
-                        relative bg-slate-900 border-2 rounded-xl p-4 flex flex-col justify-between transition-all group
-                        ${item.bought ? 'opacity-50 grayscale' : 'hover:scale-105 hover:border-white'}
-                    `}
-                    style={{ borderColor: RARITY_COLORS[item.data.rarity] }}
-                >
-                    <div className="flex justify-between items-start">
-                        <span className="text-xs font-bold px-2 py-1 rounded bg-black/50" style={{ color: RARITY_COLORS[item.data.rarity] }}>
-                            {item.data.rarity}
-                        </span>
-                        <button onClick={() => toggleLock(item.id)} className={`p-1 rounded ${item.locked ? 'text-yellow-400' : 'text-gray-600 hover:text-white'}`}>
-                            <Lock size={16} />
+            {items.map(shopItem => {
+                const isWeapon = shopItem.type === 'WEAPON';
+                const data = shopItem.data as BrotatoItem | AmmoItem;
+                const rarity = isWeapon ? (data as AmmoItem).rarity : TIER_TO_RARITY[(data as BrotatoItem).tier];
+                const color = RARITY_COLORS[rarity];
+                const ownedCount = !isWeapon ? ownedItems[(data as BrotatoItem).id] || 0 : 0;
+                const maxCount = !isWeapon ? (data as BrotatoItem).max : undefined;
+
+                return (
+                    <div 
+                        key={shopItem.id}
+                        className={`
+                            relative bg-slate-900 border-2 rounded-xl p-4 flex flex-col justify-between transition-all group
+                            ${shopItem.bought ? 'opacity-50 grayscale' : 'hover:scale-105 hover:border-white'}
+                        `}
+                        style={{ borderColor: color }}
+                    >
+                        <div className="flex justify-between items-start">
+                           <div className="flex items-center gap-2 text-xs font-bold px-2 py-1 rounded bg-black/50" style={{ color }}>
+                             {isWeapon ? <Sword size={12}/> : <Package size={12}/>}
+                             {rarity}
+                           </div>
+
+                            <button onClick={() => toggleLock(shopItem.id)} className={`p-1 rounded ${shopItem.locked ? 'text-yellow-400' : 'text-gray-600 hover:text-white'}`}>
+                                <Lock size={16} />
+                            </button>
+                        </div>
+
+                        <div className="flex flex-col items-center text-center my-4 flex-1">
+                            <div className="text-6xl mb-4 transform transition-transform group-hover:scale-110">
+                                {isWeapon ? (data as AmmoItem).emoji : data.name.charAt(0)}
+                            </div>
+                            <h3 className="text-lg font-bold mb-2">
+                                {data.name}
+                            </h3>
+                            
+                            <div className="bg-black/30 p-3 rounded w-full text-sm text-gray-300 flex-1 flex flex-col justify-center">
+                                <p>{isWeapon ? (data as AmmoItem).description : (data as BrotatoItem).desc}</p>
+                            </div>
+                        </div>
+                        
+                        {!isWeapon && maxCount && (
+                             <div className="text-center text-xs text-yellow-400 font-mono mb-2">
+                                Owned: {ownedCount} / {maxCount}
+                            </div>
+                        )}
+
+                        <button 
+                            onClick={() => handleBuy(shopItem)}
+                            disabled={shopItem.bought || stats.gold < shopItem.price}
+                            className={`
+                                w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2
+                                ${shopItem.bought ? 'bg-gray-800 text-gray-500' : stats.gold >= shopItem.price ? 'bg-green-600 hover:bg-green-500' : 'bg-red-900/50 text-red-300'}
+                            `}
+                        >
+                            {shopItem.bought ? 'SOLD' : <><Coins size={16}/> {shopItem.price}</>}
                         </button>
                     </div>
-
-                    <div className="flex flex-col items-center text-center my-4 flex-1">
-                        <div className="text-6xl mb-4 transform transition-transform group-hover:scale-110">
-                            {'emoji' in item.data ? item.data.emoji : '📦'}
-                        </div>
-                        <h3 className="text-lg font-bold mb-2">
-                            {item.data.name}
-                        </h3>
-                        
-                        <div className="bg-black/30 p-3 rounded w-full text-sm text-gray-300 flex-1 flex flex-col justify-center">
-                            {'description' in item.data ? (
-                                <p>{item.data.description}</p>
-                            ) : (
-                                <div className="space-y-1">
-                                    <p>DMG: {(item.data as AmmoItem).damage}</p>
-                                    <p className="text-xs text-gray-500 italic">Adds Unit to Grid</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <button 
-                        onClick={() => handleBuy(item)}
-                        disabled={item.bought || stats.gold < item.price}
-                        className={`
-                            w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2
-                            ${item.bought ? 'bg-gray-800 text-gray-500' : stats.gold >= item.price ? 'bg-green-600 hover:bg-green-500' : 'bg-red-900/50 text-red-300'}
-                        `}
-                    >
-                        {item.bought ? 'SOLD' : <><Coins size={16}/> {item.price}</>}
-                    </button>
-                </div>
-            ))}
+                )
+            })}
         </div>
 
         <div className="mt-auto flex justify-between items-center bg-slate-900/50 p-6 rounded-2xl border border-white/5">
              <div className="flex items-center gap-4">
                 <button 
                     onClick={handleReroll}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-colors"
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-colors disabled:bg-slate-700 disabled:cursor-not-allowed"
                     disabled={stats.gold < rerollCost}
                 >
                     <RefreshCw size={20} /> Reroll (-{rerollCost})
