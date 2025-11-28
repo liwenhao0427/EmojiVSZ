@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ShopItem, BrotatoItem, UnitData } from '../types';
-import { RARITY_COLORS, TIER_TO_RARITY } from '../constants';
+import { RARITY_COLORS, TIER_TO_RARITY, PRICE_MULTIPLIER } from '../constants';
 import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown, Package, Sword } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
 import { rollShopItems } from '../services/itemGenerator';
@@ -13,7 +13,6 @@ interface ShopProps {
   onNextWave: () => void;
 }
 
-// Create a pool of unit IDs to pick from, can be filtered later (e.g. by tier)
 const UNIT_ID_POOL = Object.keys(UNIT_DATA);
 
 export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
@@ -23,7 +22,13 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
   const [isVisible, setIsVisible] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const rerollCost = 1 + Math.max(0, stats.wave - 1) + rerollCount;
+  const allItemsBought = useMemo(() => items.length > 0 && items.every(item => item.bought), [items]);
+  
+  const rerollCost = useMemo(() => {
+    if (allItemsBought) return 0;
+    return Math.floor((1 + Math.max(0, stats.wave - 1) + rerollCount) * PRICE_MULTIPLIER);
+  }, [allItemsBought, stats.wave, rerollCount]);
+
 
   const generateShop = (keepLocked = true) => {
     let newItems: ShopItem[] = [];
@@ -32,13 +37,13 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
         newItems = items.filter(i => i.locked && !i.bought);
     }
     
-    // Roll for Brotato-style items first
     const itemsToRoll = 4 - newItems.length;
     if (itemsToRoll > 0) {
       const rolledBrotatoItems = rollShopItems(stats.wave, stats.luck, ownedItems, itemsToRoll);
       
       rolledBrotatoItems.forEach(item => {
-        const price = Math.round(item.price * (1 - (stats.shopDiscount || 0) / 100));
+        const basePrice = Math.round(item.price * PRICE_MULTIPLIER);
+        const price = Math.round(basePrice * (1 - (stats.shopDiscount || 0) / 100));
         newItems.push({
           id: uuidv4(),
           type: 'ITEM',
@@ -50,33 +55,30 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
       });
     }
 
-    // Replace one item with a unit with some probability
-    if (newItems.length > 0 && Math.random() < 0.35) {
-        const unitId = UNIT_ID_POOL[Math.floor(Math.random() * UNIT_ID_POOL.length)];
-        const unitData = UNIT_DATA[unitId];
-        if (unitData) {
-            const price = Math.round(unitData.price * (1 - (stats.shopDiscount || 0) / 100));
-            const shopUnit: ShopItem = {
-                id: uuidv4(),
-                type: 'UNIT',
-                data: unitData,
-                price: price,
-                locked: false,
-                bought: false
-            };
-            // Replace a random non-locked, non-bought item
-            const replacableIndices = newItems
-                .map((item, index) => (item.locked || item.bought ? -1 : index))
-                .filter(index => index !== -1);
-            
-            if (replacableIndices.length > 0) {
-                const indexToReplace = replacableIndices[Math.floor(Math.random() * replacableIndices.length)];
-                newItems[indexToReplace] = shopUnit;
-            } else {
-                 newItems.push(shopUnit); // Fallback to add if all are locked/bought
+    // Unit Chance Calculation: Base 40% + Luck%
+    const unitChance = 0.40 + (stats.luck * 0.01);
+
+    // Try to replace items with units based on chance
+    newItems.forEach((item, idx) => {
+        if (!item.locked && !item.bought && item.type === 'ITEM') {
+            if (Math.random() < unitChance) {
+                 const unitId = UNIT_ID_POOL[Math.floor(Math.random() * UNIT_ID_POOL.length)];
+                 const unitData = UNIT_DATA[unitId];
+                 if (unitData) {
+                    const basePrice = Math.round(unitData.price * PRICE_MULTIPLIER);
+                    const price = Math.round(basePrice * (1 - (stats.shopDiscount || 0) / 100));
+                    newItems[idx] = {
+                        id: uuidv4(),
+                        type: 'UNIT',
+                        data: unitData,
+                        price: price,
+                        locked: false,
+                        bought: false
+                    };
+                 }
             }
         }
-    }
+    });
 
 
     setItems(newItems.slice(0, 4).sort(() => Math.random() - 0.5));
@@ -97,7 +99,7 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
                  setTimeout(() => setFeedback(null), 2000);
                  return;
             }
-            onBuyItem(itemData);
+            onBuyItem({ ...itemData, price: shopItem.price }); // Pass the adjusted price
             shopItem.bought = true;
         } else {
              const placed = addUnit(shopItem.data as UnitData);
@@ -116,7 +118,9 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
 
   const handleReroll = () => {
     if (stats.gold >= rerollCost) {
-        useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold - rerollCost }}));
+        if (rerollCost > 0) {
+            useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold - rerollCost }}));
+        }
         setRerollCount(prev => prev + 1);
         generateShop(true);
     }
@@ -171,7 +175,7 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
             {items.map(shopItem => {
                 const isUnit = shopItem.type === 'UNIT';
                 const data = shopItem.data as BrotatoItem | UnitData;
-                const rarity = isUnit ? 'COMMON' : TIER_TO_RARITY[(data as BrotatoItem).tier]; // Units don't have tiers/rarity yet
+                const rarity = isUnit ? 'COMMON' : TIER_TO_RARITY[(data as BrotatoItem).tier]; 
                 const color = RARITY_COLORS[rarity];
                 const ownedCount = !isUnit ? ownedItems[(data as BrotatoItem).id] || 0 : 0;
                 const maxCount = !isUnit ? (data as BrotatoItem).max : undefined;
@@ -237,7 +241,7 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave }) => {
                     className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-colors disabled:bg-slate-700 disabled:cursor-not-allowed"
                     disabled={stats.gold < rerollCost}
                 >
-                    <RefreshCw size={20} /> 刷新 (-{rerollCost})
+                    <RefreshCw size={20} /> {rerollCost === 0 ? '刷新 (免费)' : `刷新 (-${rerollCost})`}
                 </button>
             </div>
 

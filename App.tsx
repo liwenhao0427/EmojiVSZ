@@ -1,9 +1,9 @@
 
-
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/engine';
 import { LevelUpModal } from './components/LevelUpModal';
 import { GameOverScreen } from './components/GameOverScreen';
+import { StartScreen } from './components/StartScreen';
 import { Shop } from './components/Shop';
 import { useGameStore } from './store/useGameStore';
 import { GamePhase, DraftOption, InspectableEntity, BrotatoItem } from './types';
@@ -26,8 +26,9 @@ export default function App() {
 
   // Initial load
   useEffect(() => {
-    initGame();
-  }, [initGame]);
+    // 移除自动 initGame，等待用户点击开始
+    // initGame(); 
+  }, []);
 
   useEffect(() => {
     if (canvasRef.current && !engineRef.current) {
@@ -46,7 +47,8 @@ export default function App() {
               if (newXp >= newMaxXp) {
                   newXp -= newMaxXp;
                   newLevel += 1;
-                  newMaxXp = INITIAL_STATS.maxXp + (newLevel - 1) * 10; // Reduced XP Scaling
+                  // Harder scaling for levels: +50% requirement per level
+                  newMaxXp = Math.floor(newMaxXp * 1.5); 
                   didLevelUp = true;
               }
 
@@ -100,13 +102,18 @@ export default function App() {
         // This is more of a safety net for strict mode.
         // engineRef.current?.cleanup(); 
     }
-  }, [phase, stats.wave, showLevelUp, initGame, setPhase, setInspectedEntity]);
+  }, [phase, stats.wave, showLevelUp]);
 
-  const handleRestart = () => {
+  const handleStartGame = () => {
+    engineRef.current?.stop();
+    waveStartedRef.current = 0;
     initGame();
     setShowLevelUp(false);
     setInspectedEntity(null);
-    waveStartedRef.current = 0;
+  };
+
+  const handleRestart = () => {
+    handleStartGame();
   };
 
   const handleDraftSelect = (option: DraftOption) => {
@@ -129,6 +136,11 @@ export default function App() {
           height={CANVAS_HEIGHT}
           className="block w-full h-full cursor-pointer"
         />
+
+        {/* Start Screen */}
+        {phase === GamePhase.START && (
+            <StartScreen onStart={handleStartGame} />
+        )}
 
         {/* HUD Overlay */}
         {(phase === GamePhase.COMBAT || phase === GamePhase.SHOP) && (

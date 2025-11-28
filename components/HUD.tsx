@@ -1,6 +1,4 @@
 
-
-
 import React, { useState } from 'react';
 import { PlayerStats } from '../types';
 import { Zap, Shield, Swords, Crosshair, Wind, Clover, Menu, Magnet, GraduationCap, Coins } from 'lucide-react';
@@ -12,18 +10,18 @@ interface HUDProps {
 }
 
 const STAT_DISPLAY_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; isPercent?: boolean, isFloat?: boolean }> = {
-    damagePercent: { label: 'Damage', icon: Swords, color: 'text-red-400', isPercent: true },
-    attackSpeed: { label: 'Atk Speed', icon: Wind, color: 'text-yellow-400', isPercent: true },
-    critChance: { label: 'Crit Chance', icon: Crosshair, color: 'text-orange-400', isPercent: true, isFloat: true },
-    luck: { label: 'Luck', icon: Clover, color: 'text-green-400' },
-    xpGain: { label: 'XP Gain', icon: GraduationCap, color: 'text-purple-400', isPercent: true, isFloat: true },
-    meleeDmg: { label: 'Melee Dmg', icon: Swords, color: 'text-red-300' },
-    rangedDmg: { label: 'Ranged Dmg', icon: Swords, color: 'text-blue-300' },
-    elementalDmg: { label: 'Elemental Dmg', icon: Swords, color: 'text-purple-300' },
-    engineering: { label: 'Engineering', icon: Swords, color: 'text-gray-300' },
-    enemy_count: { label: 'Enemy Count', icon: Zap, color: 'text-pink-400', isPercent: true },
-    explosion_dmg: { label: 'Explosion Dmg', icon: Zap, color: 'text-orange-500', isPercent: true},
-    burn_chance: { label: 'Burn Chance', icon: Zap, color: 'text-red-500', isPercent: true},
+    damagePercent: { label: '伤害加成', icon: Swords, color: 'text-red-400', isPercent: true },
+    attackSpeed: { label: '攻击速度', icon: Wind, color: 'text-yellow-400', isPercent: true },
+    critChance: { label: '暴击率', icon: Crosshair, color: 'text-orange-400', isPercent: true, isFloat: true },
+    luck: { label: '幸运', icon: Clover, color: 'text-green-400' },
+    xpGain: { label: '经验加成', icon: GraduationCap, color: 'text-purple-400', isPercent: true, isFloat: true },
+    meleeDmg: { label: '近战伤害', icon: Swords, color: 'text-red-300' },
+    rangedDmg: { label: '远程伤害', icon: Swords, color: 'text-blue-300' },
+    elementalDmg: { label: '元素伤害', icon: Swords, color: 'text-purple-300' },
+    engineering: { label: '工程学', icon: Swords, color: 'text-gray-300' },
+    enemy_count: { label: '敌人数量', icon: Zap, color: 'text-pink-400', isPercent: true },
+    explosion_dmg: { label: '爆炸伤害', icon: Zap, color: 'text-orange-500', isPercent: true},
+    burn_chance: { label: '燃烧几率', icon: Zap, color: 'text-red-500', isPercent: true},
 };
 
 
@@ -89,7 +87,7 @@ export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
 
             {/* Center: Timer */}
             <div className="flex flex-col items-center justify-center -mt-2">
-                 <div className="text-xs font-black text-gray-500 tracking-[0.2em] uppercase">Wave {currentWave}</div>
+                 <div className="text-xs font-black text-gray-500 tracking-[0.2em] uppercase">第 {currentWave} 波</div>
                  <div className={`text-4xl font-mono font-black drop-shadow-lg ${waveTime < 10 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                     {Math.ceil(waveTime)}
                  </div>
@@ -109,11 +107,11 @@ export const HUD: React.FC<HUDProps> = ({ stats, waveTime, currentWave }) => {
                     absolute top-14 right-0 glass-panel p-3 rounded-xl w-64 bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl transition-all duration-300 origin-top-right z-50
                     ${isExpanded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}
                 `}>
-                     <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest border-b border-white/10 pb-1">Combat Attributes</h3>
+                     <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest border-b border-white/10 pb-1">战斗属性</h3>
                      {displayedStats.map(key => (
                         <StatRow key={key} statKey={key} value={stats[key]!} />
                      ))}
-                     {displayedStats.length === 0 && <p className="text-xs text-gray-500 text-center py-2">No active bonuses.</p>}
+                     {displayedStats.length === 0 && <p className="text-xs text-gray-500 text-center py-2">暂无生效增益</p>}
                 </div>
             </div>
         </div>

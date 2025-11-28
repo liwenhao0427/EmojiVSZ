@@ -1,5 +1,4 @@
 
-
 import { PlayerStats, Unit, Rarity } from './types';
 
 export const CANVAS_WIDTH = 1200; 
@@ -12,14 +11,17 @@ export const GRID_OFFSET_X = 60;
 export const GRID_OFFSET_Y = 100; 
 export const GRID_TOP_OFFSET = 100;
 
+// 全局价格倍率
+export const PRICE_MULTIPLIER = 1.5;
+
 export const INITIAL_STATS: PlayerStats = {
   gold: 10,
   heroLevel: 1,
   heroXp: 0,
-  heroMaxXp: 50, // Lower initial XP
+  heroMaxXp: 50, 
   level: 1,
   xp: 0,
-  maxXp: 100, // Doubled initial XP requirement
+  maxXp: 150, // Increased initial XP requirement
   
   damagePercent: 0,
   attackSpeed: 0,

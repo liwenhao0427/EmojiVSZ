@@ -1,14 +1,21 @@
 
-
 import React from 'react';
 import { InspectableEntity, Unit } from '../types';
-import { Sword, Wind, Target, Activity } from 'lucide-react';
+import { Sword, Wind, Target, Activity, Crosshair } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
 import { CELL_SIZE } from '../constants';
 
 interface InspectorPanelProps {
   entity: InspectableEntity;
 }
+
+const ATTACK_PATTERN_MAP: Record<string, string> = {
+    SHOOT: '定点射击 (Shoot)',
+    THRUST: '近战突刺 (Thrust)',
+    SWING: '扇形挥砍 (Swing)',
+    STREAM: '持续喷射 (Stream)',
+    NONE: '被动/无 (Passive)'
+};
 
 const StatRow = ({ icon: Icon, label, value, tooltip, color }: any) => (
     <div className="group relative flex justify-between items-center py-2 border-b border-white/5 last:border-0">
@@ -42,14 +49,18 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
       finalCooldown = statsBreakdown.cooldown.base.toFixed(2);
   }
 
-  let dmgTooltip = `Base: ${statsBreakdown.damage.base}\nBonus: +${statsBreakdown.damage.bonus}\nMultiplier: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
-  let cdTooltip = `Base: ${statsBreakdown.cooldown.base}s\nMultiplier: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
+  let dmgTooltip = `基础: ${statsBreakdown.damage.base}\n加成: +${statsBreakdown.damage.bonus}\n倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
+  let cdTooltip = `基础: ${statsBreakdown.cooldown.base}s\n倍率: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
 
   const hpPct = Math.max(0, data.hp / data.maxHp) * 100;
 
   const rangeInPixels = 'range' in data ? (data as Unit).range : 0;
   const rangeInCells = Math.floor(rangeInPixels / CELL_SIZE);
-  const displayRange = rangeInPixels >= 2000 ? "Global" : `${rangeInCells} Grids`;
+  const displayRange = rangeInPixels >= 2000 ? "全屏" : `${rangeInCells} 格`;
+  
+  const attackPatternDisplay = isUnit && 'attackPattern' in data 
+      ? ATTACK_PATTERN_MAP[(data as Unit).attackPattern || 'NONE'] 
+      : null;
 
   return (
     <div className="absolute right-4 top-24 w-64 glass-panel rounded-xl p-4 border border-white/10 animate-in slide-in-from-right duration-300 pointer-events-auto">
@@ -94,14 +105,14 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
         <div className="bg-black/20 rounded-lg p-3">
              <StatRow 
                 icon={Sword} 
-                label="Damage" 
+                label="伤害" 
                 value={finalDamage} 
                 color="text-red-400"
                 tooltip={dmgTooltip}
              />
              <StatRow 
                 icon={Wind} 
-                label="Cooldown" 
+                label="冷却" 
                 value={`${finalCooldown}s`} 
                 color="text-yellow-400"
                 tooltip={cdTooltip}
@@ -109,25 +120,34 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
              {'range' in data && (
                  <StatRow 
                     icon={Target} 
-                    label="Range" 
+                    label="射程" 
                     value={displayRange}
                     color="text-cyan-400"
-                    tooltip={`Actual range: ${rangeInPixels} pixels`}
+                    tooltip={`实际像素: ${rangeInPixels} px`}
+                 />
+             )}
+             {attackPatternDisplay && (
+                 <StatRow 
+                    icon={Crosshair} 
+                    label="攻击模式" 
+                    value={attackPatternDisplay.split(' ')[0]} 
+                    color="text-purple-400"
+                    tooltip={attackPatternDisplay}
                  />
              )}
              {'speed' in data && (
                  <StatRow 
                     icon={Activity} 
-                    label="Speed" 
+                    label="速度" 
                     value={(data as any).speed} 
                     color="text-orange-400"
-                    tooltip="Movement speed pixels/sec"
+                    tooltip="移动速度 (像素/秒)"
                  />
              )}
         </div>
 
         <div className="mt-4 text-[10px] text-gray-500 text-center italic">
-            Click on entities to lock/unlock view
+            点击实体可锁定/解锁视图
         </div>
     </div>
   );

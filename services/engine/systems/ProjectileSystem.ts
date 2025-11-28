@@ -11,24 +11,19 @@ import { SimpleObjectPool } from '../utils/SimpleObjectPool';
 
 export class ProjectileSystem implements System {
   
-  // 1. 实例化网格和对象池
   private grid: SpatialHashGrid;
   private projectilePool: SimpleObjectPool<Projectile>;
 
   constructor(private floatingTextSystem: FloatingTextSystem) {
-    // 空间网格初始化，格子大小约等于游戏 Grid 大小
     this.grid = new SpatialHashGrid(CELL_SIZE);
     
-    // 子弹对象池初始化
     this.projectilePool = new SimpleObjectPool<Projectile>(
-      // 创建新对象函数
       () => ({
         id: 0, x: 0, y: 0, radius: 10, markedForDeletion: false,
         vx: 0, vy: 0, damage: 0, originType: 'RANGED', type: 'LINEAR'
       }),
-      // 重置对象函数 (在 get 时调用)
       (p) => {
-        p.id = Math.random(); // 重新分配ID
+        p.id = Math.random(); 
         p.markedForDeletion = false;
         p.targetId = undefined;
         p.hitEnemies = undefined;
@@ -36,18 +31,15 @@ export class ProjectileSystem implements System {
         p.spawnY = undefined;
         p.emoji = undefined;
         p.effects = undefined;
-        // 其他属性会由调用者覆盖
+        p.bounceCount = undefined;
+        p.chainExplosion = undefined;
       }
     );
   }
 
-  /**
-   * 暴露给 UnitSystem 调用，用于从池中获取子弹
-   */
   public spawnProjectile(gameState: GameState, props: Omit<Projectile, 'id'>) {
     const p = this.projectilePool.get();
     
-    // 手动赋值属性
     p.x = props.x;
     p.y = props.y;
     p.vx = props.vx;
@@ -62,12 +54,13 @@ export class ProjectileSystem implements System {
     p.life = props.life;
     p.hitEnemies = props.hitEnemies;
     p.spawnY = props.spawnY;
+    p.bounceCount = props.bounceCount;
+    p.chainExplosion = props.chainExplosion;
 
     gameState.projectiles.push(p);
   }
 
   update(dt: number, gameState: GameState, callbacks: EngineCallbacks) {
-    // 2. 空间网格：每帧清理并重新插入所有存活敌人
     this.grid.clear();
     gameState.enemies.forEach(e => {
         this.grid.insert({ x: e.x, y: e.y, id: e.id, radius: e.radius });
@@ -82,6 +75,9 @@ export class ProjectileSystem implements System {
           const angle = Math.atan2(target.y - p.y, target.x - p.x);
           p.vx = Math.cos(angle) * 600;
           p.vy = Math.sin(angle) * 600;
+        } else {
+            // If target dies, switch to linear or find new target
+            p.type = 'LINEAR';
         }
       }
       p.x += p.vx * dt;
@@ -93,15 +89,13 @@ export class ProjectileSystem implements System {
               p.markedForDeletion = true;
               return;
           }
-          if (p.spawnY) { // Sine wave motion for flames
+          if (p.spawnY) { 
               p.y = p.spawnY + Math.sin(p.x / 20) * 10;
           }
           
-          // 3. 空间网格：只检测附近网格的敌人 (优化 O(N))
           const potentialTargets = this.grid.retrieve({ x: p.x, y: p.y, radius: p.radius, id: p.id });
           
           potentialTargets.forEach(pt => {
-              // 再次确认精确距离 (Narrow Phase)
               const e = gameState.enemies.find(enemy => enemy.id === pt.id);
               if (e && !e.markedForDeletion) {
                   if (!(p.hitEnemies?.includes(e.id)) && Math.hypot(e.x - p.x, e.y - p.y) < (e.radius + p.radius)) {
@@ -113,7 +107,6 @@ export class ProjectileSystem implements System {
           });
 
       } else { // Standard projectile logic
-          // 3. 空间网格：只检测附近网格的敌人 (优化 O(N))
           const potentialTargets = this.grid.retrieve({ x: p.x, y: p.y, radius: p.radius, id: p.id });
           let hit = false;
           
@@ -124,18 +117,21 @@ export class ProjectileSystem implements System {
                       this.applyHit(p, e, gameState, callbacks);
                       p.markedForDeletion = true;
                       hit = true;
-                      break; // 击中一个即停止
+                      
+                      // BOUNCE LOGIC
+                      if (p.bounceCount && p.bounceCount > 0) {
+                          this.handleBounce(p, e, gameState);
+                      }
+                      
+                      break; 
                   }
               }
           }
       }
 
-      // Out of bounds check
-      if (p.x > CANVAS_WIDTH + 50 || p.x < -50) p.markedForDeletion = true;
+      if (p.x > CANVAS_WIDTH + 50 || p.x < -50 || p.y < -50 || p.y > 1000) p.markedForDeletion = true;
     });
 
-    // 4. 对象池回收：将标记删除的子弹归还到池中
-    // 注意：这里需要先手动 release，再 filter，避免对象引用丢失
     gameState.projectiles.forEach(p => {
         if (p.markedForDeletion) {
             this.projectilePool.release(p);
@@ -145,7 +141,46 @@ export class ProjectileSystem implements System {
     gameState.projectiles = gameState.projectiles.filter(p => !p.markedForDeletion);
   }
 
-  private applyHit(p: any, target: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
+  private handleBounce(p: Projectile, hitEnemy: Enemy, gameState: GameState) {
+      // Find nearest enemy excluding hitEnemy
+      let nearestDist = Infinity;
+      let nearestEnemy: Enemy | null = null;
+      
+      gameState.enemies.forEach(e => {
+          if (e.id !== hitEnemy.id && !e.markedForDeletion) {
+              const dist = Math.hypot(e.x - p.x, e.y - p.y);
+              if (dist < 500 && dist < nearestDist) {
+                  nearestDist = dist;
+                  nearestEnemy = e;
+              }
+          }
+      });
+      
+      if (nearestEnemy) {
+          const newP: Omit<Projectile, 'id'> = {
+            x: p.x, y: p.y,
+            vx: 0, vy: 0, // Set below
+            damage: Math.round(p.damage * 0.7), // 70% damage on bounce
+            emoji: p.emoji,
+            radius: p.radius,
+            markedForDeletion: false,
+            type: 'TRACKING',
+            originType: p.originType,
+            effects: p.effects,
+            bounceCount: p.bounceCount! - 1,
+            targetId: (nearestEnemy as Enemy).id,
+            chainExplosion: p.chainExplosion
+          };
+          
+          const angle = Math.atan2((nearestEnemy as Enemy).y - p.y, (nearestEnemy as Enemy).x - p.x);
+          newP.vx = Math.cos(angle) * 600;
+          newP.vy = Math.sin(angle) * 600;
+          
+          this.spawnProjectile(gameState, newP);
+      }
+  }
+
+  private applyHit(p: Projectile, target: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
       target.hp -= p.damage;
       target.hitFlash = 0.2;
       
@@ -154,21 +189,51 @@ export class ProjectileSystem implements System {
           target.slowMultiplier = 0.7;
       }
 
+      // Explode on hit (Level 3 Effect)
+      if (p.effects?.explode_on_hit) {
+          this.triggerAOE(gameState, target.x, target.y, 100, p.damage * 0.5, callbacks, p.chainExplosion);
+      }
+
       this.floatingTextSystem.addText(gameState, target.x, target.y, `-${Math.round(p.damage)}`, 'yellow');
       
       if (target.hp <= 0) {
+        // Chain Explosion Logic (Level 4 Effect)
+        if (p.chainExplosion) {
+             this.triggerAOE(gameState, target.x, target.y, 150, p.damage, callbacks, false);
+        }
         this.killEnemy(target, gameState, callbacks);
       }
+  }
+
+  private triggerAOE(gameState: GameState, x: number, y: number, radius: number, damage: number, callbacks: EngineCallbacks, chain: boolean = false) {
+      // Visual feedback
+      callbacks.onAddFloatingText?.(gameState, 'BOOM!', 'orange', x, y - 20);
+      
+      gameState.enemies.forEach(e => {
+          if (!e.markedForDeletion && Math.hypot(e.x - x, e.y - y) <= radius) {
+              e.hp -= damage;
+              e.hitFlash = 0.3;
+              if (e.hp <= 0) {
+                  this.killEnemy(e, gameState, callbacks);
+                  if (chain) {
+                      // Chain reaction (limit depth or probability to prevent infinite loops if desired)
+                      // Simple implementation: trigger another smaller blast
+                      setTimeout(() => this.triggerAOE(gameState, e.x, e.y, radius * 0.8, damage * 0.5, callbacks, false), 100);
+                  }
+              }
+          }
+      });
   }
 
   private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
     if (e.markedForDeletion) return;
     e.markedForDeletion = true;
     
+    // NERFED XP
     const isBoss = e.type === 'BOSS';
     const isElite = e.type === 'ELITE';
     
-    const xp = isBoss ? 50 : isElite ? 20 : 10;
+    const xp = isBoss ? 15 : isElite ? 7 : 3;
     const gold = isBoss ? 20 : isElite ? 10 : 5;
 
     callbacks.onGainLoot?.(xp, gold);
@@ -176,7 +241,6 @@ export class ProjectileSystem implements System {
     this.floatingTextSystem.addText(gameState, e.x, e.y - 20, `+${xp} XP`, 'cyan');
     this.floatingTextSystem.addText(gameState, e.x, e.y - 50, `+${gold} G`, 'yellow');
 
-    // Cyberball logic
     const store = useGameStore.getState();
     const chainChance = store.stats.chain_death_dmg_chance || 0;
     if (Math.random() * 100 < chainChance) {

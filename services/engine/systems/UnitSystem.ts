@@ -5,7 +5,7 @@ import { EngineCallbacks } from '../index';
 import { useGameStore } from '../../../store/useGameStore';
 import { Unit, Enemy, Projectile, PlayerStats } from '../../../types';
 import { GRID_ROWS, GRID_OFFSET_Y, GRID_OFFSET_X, CELL_SIZE } from '../../../constants';
-import { ProjectileSystem } from './ProjectileSystem'; // 引入类型
+import { ProjectileSystem } from './ProjectileSystem'; 
 
 export class UnitSystem implements System {
   private unitCooldowns: Map<string, number> = new Map();
@@ -14,7 +14,6 @@ export class UnitSystem implements System {
     this.unitCooldowns.clear();
   }
 
-  // 修改：args 接收其他 Systems 实例
   update(dt: number, gameState: GameState, callbacks: EngineCallbacks, projectileSystem?: ProjectileSystem) {
     const store = useGameStore.getState();
     const { gridUnits } = store;
@@ -23,7 +22,7 @@ export class UnitSystem implements System {
         if (u.isDead) {
             if (u.effects?.explode_on_death || u.effects?.explode_on_hit || u.effects?.trigger_on_move) {
                 this.triggerExplosion(u, gameState, callbacks);
-                if (u.effects) { // Prevent re-explosion
+                if (u.effects) { 
                     delete u.effects.explode_on_death;
                     delete u.effects.explode_on_hit;
                     delete u.effects.trigger_on_move;
@@ -77,12 +76,10 @@ export class UnitSystem implements System {
         validEnemies = gameState.enemies.filter(e => Math.hypot(e.x - unitX, e.y - unitY) <= u.range);
       }
       
-      // 修复：如果没有敌人在范围内，不进行攻击，也不消耗冷却
       if (validEnemies.length === 0) return;
 
       const target = validEnemies.sort((a,b) => Math.hypot(a.x - unitX, a.y - unitY) - Math.hypot(b.x - unitX, b.y - unitY))[0];
 
-      // Attack if cooldown is ready and target exists
       const damage = this.calculateFinalDamage(u, store.stats);
 
       switch (u.attackPattern) {
@@ -119,7 +116,6 @@ export class UnitSystem implements System {
               break;
       }
       
-      // Reset cooldown unconditionally after an attack action.
       const buff = (1 + (store.stats.attackSpeed / 100)) * heroAspdBuff;
       this.unitCooldowns.set(u.id, u.maxCooldown / buff);
     });
@@ -177,14 +173,16 @@ export class UnitSystem implements System {
   private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
     if (e.markedForDeletion) return;
     e.markedForDeletion = true;
-    const xp = e.type === 'BOSS' ? 50 : e.type === 'ELITE' ? 20 : 10;
+    
+    // NERFED XP GAINS
+    const xp = e.type === 'BOSS' ? 15 : e.type === 'ELITE' ? 7 : 3;
     const gold = e.type === 'BOSS' ? 20 : e.type === 'ELITE' ? 10 : 5;
+    
     callbacks.onGainLoot?.(xp, gold);
 
     callbacks.onAddFloatingText?.(gameState, `+${xp} XP`, 'cyan', e.x, e.y - 20);
     callbacks.onAddFloatingText?.(gameState, `+${gold} G`, 'yellow', e.x, e.y - 50);
 
-    // Cyberball logic
     const store = useGameStore.getState();
     const chainChance = store.stats.chain_death_dmg_chance || 0;
     if (Math.random() * 100 < chainChance) {
@@ -213,16 +211,15 @@ export class UnitSystem implements System {
     });
   }
 
-  // 修改：接收 projectileSystem 参数以调用对象池
   private fireProjectile(u: Unit, x: number, y: number, target: Enemy | undefined, gameState: GameState, projectileSystem?: ProjectileSystem) {
     const store = useGameStore.getState();
     const damage = this.calculateFinalDamage(u, store.stats);
     
     const projectileType: 'LINEAR' | 'TRACKING' = ((u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC') && target ? 'TRACKING' : 'LINEAR';
 
-    const createBaseProjectile = (startY: number): Omit<Projectile, 'id'> => ({
+    const createBaseProjectile = (startY: number, vyOffset = 0): Omit<Projectile, 'id'> => ({
       x, y: startY,
-      vx: 600, vy: 0,
+      vx: 600, vy: vyOffset,
       damage,
       emoji: u.projectileEmoji,
       radius: 10,
@@ -234,19 +231,22 @@ export class UnitSystem implements System {
       life: u.attackPattern === 'STREAM' ? 0.75 : undefined,
       hitEnemies: u.attackPattern === 'STREAM' ? [] : undefined,
       spawnY: u.attackPattern === 'STREAM' ? y : undefined,
+      bounceCount: u.effects?.bounceCount || 0,
+      chainExplosion: u.effects?.chain_explosion ? true : false
     });
 
     const addProjectile = (base: Omit<Projectile, 'id'>) => {
         if (projectileSystem) {
-            // 使用对象池生成
             projectileSystem.spawnProjectile(gameState, base);
         } else {
-            // 后备方案
             gameState.projectiles.push({ ...base, id: Math.random() });
         }
     }
 
-    if (u.isHero && u.attackType === 'TRI_SHOT') {
+    if (u.isHero && u.attackType === 'DOUBLE_SHOT') {
+        addProjectile(createBaseProjectile(y - 15));
+        addProjectile(createBaseProjectile(y + 15));
+    } else if (u.isHero && u.attackType === 'TRI_SHOT') {
       addProjectile(createBaseProjectile(y));
       if (u.row > 0) addProjectile(createBaseProjectile(y - CELL_SIZE));
       if (u.row < GRID_ROWS - 1) addProjectile(createBaseProjectile(y + CELL_SIZE));

@@ -89,17 +89,35 @@ export class RenderingSystem {
     this.ctx.fillStyle = '#0f172a';
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    this.drawGrid();
+    // 计算当前悬停的网格坐标
+    const { c: hoverC, r: hoverR } = this.inputSystem.getGridPosFromCoords(this.inputSystem.mouseX, this.inputSystem.mouseY);
+
+    this.drawGrid(hoverC, hoverR);
 
     const store = useGameStore.getState();
     const activeUnits = store.gridUnits.filter(u => u.id !== this.inputSystem.dragUnitId);
     const draggingUnit = store.gridUnits.find(u => u.id === this.inputSystem.dragUnitId);
+    
+    // 查找当前悬停的单位 (非拖拽中)
+    const hoveredUnit = !this.inputSystem.dragUnitId 
+        ? activeUnits.find(u => u.col === hoverC && u.row === hoverR && !u.isDead) 
+        : null;
 
-    activeUnits.forEach(u => this.drawUnit(u));
+    // 绘制攻击范围 (位于单位下方，网格上方)
+    if (hoveredUnit) {
+        this.drawAttackRange(hoveredUnit);
+    }
+
+    // 绘制单位
+    activeUnits.forEach(u => {
+        const isHovered = u.id === hoveredUnit?.id;
+        this.drawUnit(u, isHovered);
+    });
+
     this.drawEnemies(gameState);
     this.drawProjectiles(gameState);
 
-    if (draggingUnit) this.drawUnit(draggingUnit);
+    if (draggingUnit) this.drawUnit(draggingUnit, true);
     this.drawFloatingTexts(gameState);
 
     if (inspectedEntity && store.phase === 'COMBAT') {
@@ -108,19 +126,95 @@ export class RenderingSystem {
     }
   }
 
-  private drawGrid() {
+  private drawAttackRange(u: Unit) {
+    if (!u.range || u.range <= 0 || u.isDead) return;
+
+    const vis = this.visualUnits.get(u.id);
+    if (!vis) return;
+
+    const { x, y } = vis;
+
+    this.ctx.save();
+
+    // 呼吸效果
+    const time = performance.now() / 1000;
+    const alpha = 0.15 + Math.sin(time * 5) * 0.05;
+    this.ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
+    this.ctx.strokeStyle = `rgba(239, 68, 68, ${alpha * 2 + 0.2})`;
+    this.ctx.lineWidth = 2;
+
+    const isGlobal = (u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC' || u.range > 1500;
+
+    if (isGlobal) {
+      // --- 圆形：用于追踪、魔法或全屏攻击 ---
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, u.range, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.stroke();
+      if (u.range > 1500) {
+        this.ctx.font = '12px monospace';
+        this.ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText("GLOBAL RANGE", x, y - 40);
+      }
+    } else if (u.isHero && u.attackType === 'TRI_SHOT') {
+      // --- 3行矩形：用于英雄三向射击 ---
+      const startRow = Math.max(0, u.row - 1);
+      const endRow = Math.min(GRID_ROWS - 1, u.row + 1);
+      const rectY = GRID_OFFSET_Y + startRow * CELL_SIZE;
+      const rectHeight = (endRow - startRow + 1) * CELL_SIZE;
+      this.ctx.fillRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
+      this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
+    } else if (u.isHero && u.attackType === 'PENTA_SHOT') {
+      // --- 5行矩形：用于英雄五向射击 ---
+      const rectY = GRID_OFFSET_Y;
+      const rectHeight = GRID_ROWS * CELL_SIZE;
+      this.ctx.fillRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
+      this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
+    } else {
+      // --- 单行攻击模式 ---
+      if (u.attackPattern === 'SWING') {
+        // 扇形：用于挥砍
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, y);
+        this.ctx.arc(x, y, u.range, -Math.PI / 4, Math.PI / 4);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+      } else {
+        // 矩形：用于直线射击或突刺
+        const rectY = GRID_OFFSET_Y + u.row * CELL_SIZE;
+        this.ctx.fillRect(x - CELL_SIZE / 2, rectY, u.range, CELL_SIZE);
+        this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, CELL_SIZE);
+      }
+    }
+
+    this.ctx.restore();
+  }
+
+  private drawGrid(hoverC: number, hoverR: number) {
     this.ctx.lineWidth = 1;
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
         const x = GRID_OFFSET_X + c * CELL_SIZE;
         const y = GRID_OFFSET_Y + r * CELL_SIZE;
         
+        // 拖拽高亮 (蓝色)
         if (this.inputSystem.dragUnitId) {
           const { c: dragC, r: dragR } = this.inputSystem.getGridPosFromCoords(this.inputSystem.mouseX, this.inputSystem.mouseY);
           if (dragC === c && dragR === r) {
             this.ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
             this.ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
           }
+        }
+        // 鼠标悬停高亮 (白色) - 仅在非拖拽状态下
+        else if (hoverC === c && hoverR === r) {
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            this.ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+            
+            // 绘制边框高亮
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            this.ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
         }
 
         this.ctx.strokeStyle = 'rgba(255,255,255,0.05)';
@@ -136,7 +230,7 @@ export class RenderingSystem {
     this.ctx.stroke();
   }
 
-  private drawUnit(u: Unit) {
+  private drawUnit(u: Unit, isHovered: boolean = false) {
     const vis = this.visualUnits.get(u.id);
     if (!vis) return;
 
@@ -149,6 +243,10 @@ export class RenderingSystem {
       this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
       this.ctx.shadowBlur = 20;
       this.ctx.shadowOffsetY = 10;
+    } else if (isHovered) {
+      // 单位悬停高亮效果
+      this.ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
+      this.ctx.shadowBlur = 15;
     }
 
     if (u.attackPattern === 'SWING' && u.attackState === 'ATTACKING' && u.attackProgress) {
@@ -162,10 +260,6 @@ export class RenderingSystem {
         this.ctx.fill();
         this.ctx.restore();
     }
-
-    // 替换原有的 ctx.fillText
-    // this.ctx.font = '60px Arial';
-    // this.ctx.fillText(u.emoji, 0, 0);
     
     if (u.state === 'ARMING') this.ctx.globalAlpha = 0.5 + Math.sin(performance.now() / 100) * 0.2;
     else this.ctx.globalAlpha = 1.0;
@@ -188,8 +282,7 @@ export class RenderingSystem {
       if (vis.hitFlash > 0) {
         this.ctx.globalCompositeOperation = 'source-atop';
         this.ctx.fillStyle = `rgba(255, 255, 255, 0.7)`;
-        // 闪白效果目前还是用文字绘制遮罩比较方便，或者可以用滤镜，
-        // 为了性能这里保留 fillText 做闪白遮罩，因为这一帧很少
+        // 闪白效果目前还是用文字绘制遮罩比较方便
         this.ctx.font = '60px Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';

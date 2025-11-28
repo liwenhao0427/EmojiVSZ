@@ -62,7 +62,8 @@ export const AmmoBay: React.FC = () => {
   };
   
   // Explicitly cast the found item to AmmoItem to avoid "unknown" type errors in render
-  const activeDragItem = activeId ? (Object.values(ammoState).flat().find(i => i.id === activeId) as AmmoItem | undefined) : null;
+  // Also explicit cast for 'i' to handle cases where flat() might return unknown[]
+  const activeDragItem = activeId ? (Object.values(ammoState).flat().find((i: any) => i.id === activeId) as AmmoItem | undefined) : null;
   const detailItem = pinnedItem || hoveredItem;
 
   return (

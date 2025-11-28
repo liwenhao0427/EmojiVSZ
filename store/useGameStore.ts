@@ -1,6 +1,6 @@
 
 import { create } from 'zustand';
-import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem } from '../types';
+import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem, HeroUpgradeStatus } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 import { ITEMS_DATA } from '../data/items';
@@ -25,6 +25,9 @@ interface GameStore {
   // New state for Brotato-style items
   allItems: BrotatoItem[];
   ownedItems: Record<string, number>; // Map of item.id -> count
+  
+  // Hero Upgrade Tracking (Resets every wave)
+  heroUpgradeStatus: HeroUpgradeStatus;
 
   // Actions
   setPhase: (phase: GamePhase) => void;
@@ -88,6 +91,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   inspectedEntity: null,
   allItems: ITEMS_DATA,
   ownedItems: {},
+  heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 },
 
   setPhase: (phase) => set({ phase }),
   
@@ -137,6 +141,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       draftOptions: [],
       inspectedEntity: null,
       ownedItems: {},
+      heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 },
     });
   },
 
@@ -154,7 +159,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             damage: data.damage || 10,
             range: data.range || 1200,
             cooldown: 0,
-            // 修复：将 `data` 转换为 `Partial<Unit>` 类型以访问 `maxCooldown` 属性，因为 `UnitData` 类型中不存在此属性。
             maxCooldown: 'cd' in data && typeof data.cd === 'number' ? data.cd : ((data as Partial<Unit>).maxCooldown || 1.0),
             hp: data.maxHp || ('hp' in data && typeof data.hp === 'number' ? data.hp : 100),
             maxHp: data.maxHp || 100,
@@ -167,7 +171,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             projectileEmoji: 'projectileEmoji' in data ? data.projectileEmoji : undefined,
             state: 'IDLE',
             armingTimer: ('effect' in data && data.effect?.mine_arm_time) ? data.effect.mine_arm_time : 0,
-            // 修复：将 `data` 转换为 `Partial<Unit>` 类型以访问 `maxCooldown` 属性，因为 `UnitData` 类型中不存在此属性。
             specialEffectTimer: ('cd' in data && typeof data.cd === 'number' ? data.cd : (data as Partial<Unit>).maxCooldown) || 0,
           };
 
@@ -319,7 +322,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(state => {
       const nextUnits = state.gridUnits
         .filter(u => !u.isTemp && !u.isDead) 
-        .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
+        .map(u => {
+            // Reset Hero to default state visually if needed, but the logic relies on heroUpgradeStatus
+            if (u.isHero) {
+                return { ...u, hp: u.maxHp, isDead: false, energy: 0, attackType: 'LINEAR', effects: {} };
+            }
+            return { ...u, hp: u.maxHp, isDead: false, energy: 0 };
+        });
       
       const nextStats = calculateFinalStats(state.ownedItems, state.allItems, state.stats);
 
@@ -338,14 +347,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         gridUnits: nextUnits,
         stats: nextStats,
         draftOptions: [], 
-        phase: GamePhase.COMBAT
+        phase: GamePhase.COMBAT,
+        heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 } // Reset hero upgrades
       };
     });
   },
 
   resetWaveState: () => {
     set(state => {
-      // Just clean up units between waves. Wave increment and stat resets are handled in startNextWave.
       const nextUnits = state.gridUnits
         .filter(u => !u.isTemp && !u.isDead) 
         .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
@@ -358,10 +367,37 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   applyDraft: (option) => {
     set(state => {
-      const nextState: Partial<Pick<GameStore, 'gridUnits' | 'stats'>> = {}; 
+      const nextState: Partial<Pick<GameStore, 'gridUnits' | 'stats' | 'heroUpgradeStatus'>> = {}; 
 
       if (option.type === 'TEMP_UNIT') {
         get().addUnit({ ...option.data, isTemp: true });
+      } else if (option.type === 'HERO_UPGRADE') {
+          const upgradeData = option.data as any;
+          // Track level
+          if (upgradeData.upgradePath) {
+              const currentStatus = { ...state.heroUpgradeStatus };
+              currentStatus[upgradeData.upgradePath as keyof HeroUpgradeStatus] = upgradeData.upgradeLevel;
+              nextState.heroUpgradeStatus = currentStatus;
+          }
+
+          // Apply stats
+          const nextStats = { ...state.stats };
+          if (upgradeData.heroDamage) nextStats.heroTempDamageMult = (nextStats.heroTempDamageMult || 0) + upgradeData.heroDamage;
+          nextState.stats = nextStats;
+          
+          // Apply unit properties immediately
+          const units = [...state.gridUnits];
+          const heroIndex = units.findIndex(u => u.isHero);
+          if (heroIndex !== -1) {
+            let hero = { ...units[heroIndex] };
+            if (upgradeData.heroAttackType) hero.attackType = upgradeData.heroAttackType;
+            if (upgradeData.extraEffects) {
+                hero.effects = { ...(hero.effects || {}), ...upgradeData.extraEffects };
+            }
+            units[heroIndex] = hero;
+            nextState.gridUnits = units;
+          }
+
       } else if (option.type === 'TEMP_BUFF') {
         const buff = option.data as any;
         const nextStats = { ...state.stats };
@@ -374,15 +410,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (buff.heroMaxEnergy) nextStats.heroMaxEnergy = Math.max(20, (nextStats.heroMaxEnergy || 100) + buff.heroMaxEnergy);
 
         nextState.stats = nextStats;
-        
-        if (buff.heroAttackType) {
-          const units = [...state.gridUnits];
-          const heroIndex = units.findIndex(u => u.isHero);
-          if (heroIndex !== -1) {
-            units[heroIndex] = { ...units[heroIndex], attackType: buff.heroAttackType };
-            nextState.gridUnits = units;
-          }
-        }
       }
       return nextState;
     });

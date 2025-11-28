@@ -1,5 +1,4 @@
 
-
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
 export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -35,7 +34,7 @@ export interface Unit {
   col: number;
 
   // New property for hero attack patterns
-  attackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT';
+  attackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT' | 'DOUBLE_SHOT';
   attackPattern?: 'SHOOT' | 'THRUST' | 'SWING' | 'STREAM' | 'NONE';
   projectileEmoji?: string;
 
@@ -53,6 +52,12 @@ export interface Unit {
   
   // To store raw data for effects
   effects?: Record<string, any>;
+}
+
+export interface HeroUpgradeStatus {
+    multishot: number; // 0 -> 1(Double) -> 2(Tri) -> 3(Penta)
+    effect: number;    // 0 -> 1(Tracking) -> 2(Burn) -> 3(Explode) -> 4(Chain)
+    bounce: number;    // 0 -> 1(1) -> 2(2) -> 3(4) -> 4(10)
 }
 
 export interface PlayerStats {
@@ -99,7 +104,7 @@ export interface PlayerStats {
   heroMaxEnergy?: number;
   
   // Index signature for dynamic item effects
-  [key: string]: number | undefined;
+  [key: string]: number | undefined | any;
 }
 
 export enum GamePhase {
@@ -113,7 +118,7 @@ export enum GamePhase {
 
 export interface DraftOption {
   id: string;
-  type: 'TEMP_UNIT' | 'TEMP_BUFF';
+  type: 'TEMP_UNIT' | 'TEMP_BUFF' | 'HERO_UPGRADE';
   description: string;
   data: Partial<Unit> | { 
       damage?: number; 
@@ -121,9 +126,12 @@ export interface DraftOption {
       heroDamage?: number; 
       heroAttackSpeed?: number;
       // For hero-specific upgrades
-      heroAttackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT';
+      heroAttackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT' | 'DOUBLE_SHOT';
       heroEnergyGainRate?: number; // As a multiplier, e.g. 0.5 for +50%
       heroMaxEnergy?: number; // As a reduction, e.g., -20
+      upgradePath?: 'multishot' | 'effect' | 'bounce';
+      upgradeLevel?: number;
+      extraEffects?: Record<string, any>;
   };
   emoji: string;
   name: string;
@@ -176,6 +184,9 @@ export interface Projectile extends Entity {
   spawnY?: number; // for sine wave of stream
   // For special effects like slow
   effects?: Record<string, any>;
+  // Bouncing logic
+  bounceCount?: number;
+  chainExplosion?: boolean;
 }
 
 export interface FloatingText {
