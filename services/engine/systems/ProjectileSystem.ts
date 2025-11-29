@@ -1,5 +1,4 @@
 
-
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -193,13 +192,19 @@ export class ProjectileSystem implements System {
           target.slowTimer = 2.0;
           target.slowMultiplier = 0.7;
       }
+      
+      if (p.effects?.burn_chance && Math.random() * 100 < p.effects.burn_chance) {
+          target.burnTimer = 3.0; // Refresh duration
+          const burnDps = p.effects.burn_damage || Math.max(1, p.damage * 0.1); // 10% of hit dmg per sec, min 1
+          target.burnDamage = (target.burnDamage || 0) + burnDps; // Stacking damage
+      }
 
       // Explode on hit (Level 3 Effect)
       if (p.effects?.explode_on_hit) {
           this.triggerAOE(gameState, target.x, target.y, 100, p.damage * 0.5, callbacks, p.chainExplosion);
       }
 
-      this.floatingTextSystem.addText(gameState, target.x, target.y, `-${Math.round(p.damage)}`, 'yellow');
+      this.floatingTextSystem.addText(gameState, target.x, target.y, `-${Math.round(p.damage)}`, 'white');
       
       if (target.hp <= 0) {
         // Chain Explosion Logic (Level 4 Effect)

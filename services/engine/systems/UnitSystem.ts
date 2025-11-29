@@ -79,9 +79,12 @@ export class UnitSystem implements System {
 
       const unitX = GRID_OFFSET_X + (u.col * CELL_SIZE) + CELL_SIZE / 2;
       const unitY = GRID_OFFSET_Y + (u.row * CELL_SIZE) + CELL_SIZE / 2;
-      let validEnemies = gameState.enemies.filter(e => e.row === u.row && e.x > unitX && Math.abs(e.x - unitX) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
       
-      const isGlobalRange = (u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC' || u.range > 1500;
+      // Default: same row targeting for non-magic
+      let validEnemies = gameState.enemies.filter(e => e.row === u.row && e.x > unitX && Math.abs(e.x - unitX) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
+
+      // Global targeting for magic, hero with tracking, or specific effects/range
+      const isGlobalRange = u.type === 'MAGIC' || (u.isHero && u.attackType === 'TRACKING') || !!u.effects?.is_tracking || u.range > 1500;
       if (isGlobalRange) {
         validEnemies = gameState.enemies.filter(e => Math.hypot(e.x - unitX, e.y - unitY) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
       }
@@ -122,9 +125,9 @@ export class UnitSystem implements System {
               break;
       }
       
-      let heroAspdBuff = u.isHero ? 1.0 + (store.stats.heroTempAttackSpeedMult || 0) : 1.0;
-      let buff = (1 + (store.stats.attackSpeed / 100)) * heroAspdBuff;
-      let cooldownTime = u.maxCooldown / buff;
+      const heroAspdMult = u.isHero ? 1.0 + (store.stats.heroAttackSpeedMult || 0) : 1.0;
+      const buff = (1 + (store.stats.attackSpeed || 0)) * (1 + (store.stats.tempAttackSpeedMult || 0)) * heroAspdMult;
+      let cooldownTime = u.maxCooldown / Math.max(0.1, buff);
 
       if (u.isUlting) {
           cooldownTime = cooldownTime / 10;
@@ -171,16 +174,15 @@ export class UnitSystem implements System {
   }
   
   private calculateFinalDamage(u: Unit, stats: PlayerStats): number {
-      const heroDmgBuff = u.isHero ? (1 + (stats.heroTempDamageMult || 0)) : 1;
+      const heroDmgMult = u.isHero ? (1 + (stats.heroDamageMult || 0)) : 1;
       let flatBonus = 0;
       if (u.type === 'MELEE') flatBonus = stats.meleeDmg;
       if (u.type === 'RANGED') flatBonus = stats.rangedDmg;
       if (u.type === 'MAGIC') flatBonus = stats.elementalDmg;
-      if (u.type === 'ENGINEERING') flatBonus = stats.engineering;
       
-      const globalDmgMult = (1 + (stats.damagePercent / 100) + (stats.tempDamageMult || 0));
+      const globalDmgMult = (1 + (stats.damagePercent || 0)) * (1 + (stats.tempDamageMult || 0));
 
-      return Math.round((u.damage + flatBonus) * globalDmgMult * heroDmgBuff);
+      return Math.round((u.damage + flatBonus) * globalDmgMult * heroDmgMult);
   }
 
   private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
@@ -226,7 +228,8 @@ export class UnitSystem implements System {
     const store = useGameStore.getState();
     const damage = this.calculateFinalDamage(u, store.stats);
     
-    const projectileType: 'LINEAR' | 'TRACKING' = ((u.isHero && u.attackType === 'TRACKING') || u.type === 'MAGIC') && target ? 'TRACKING' : 'LINEAR';
+    // Magic weapons with tracking effect will track, otherwise they are linear (but can target any row via global range)
+    const projectileType: 'LINEAR' | 'TRACKING' = ((u.isHero && u.attackType === 'TRACKING') || !!u.effects?.is_tracking) && target ? 'TRACKING' : 'LINEAR';
 
     const createBaseProjectile = (startY: number, vyOffset = 0): Omit<Projectile, 'id'> => ({
       x, y: startY,

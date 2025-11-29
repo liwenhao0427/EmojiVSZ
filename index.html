@@ -3,48 +3,54 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>键盘侠大战水军</title>
+    <title>动物键盘侠自走棋</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Fredoka One 字体，增加卡通感 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
-      /* Custom scrollbar for ammo bay */
+      /* Custom scrollbar */
       .custom-scrollbar::-webkit-scrollbar {
-        height: 4px;
-        width: 4px;
+        height: 8px;
+        width: 8px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-        background: rgba(31, 41, 55, 0.5);
+        background: #f1f5f9;
+        border-radius: 4px;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #3b82f6;
-        border-radius: 2px;
+        background: #94a3b8;
+        border-radius: 4px;
       }
       
       body {
         overscroll-behavior: none;
         user-select: none;
-        background-color: #020617; /* Slate 950 - Void Background */
+        background-color: #bae6fd; /* Sky Blue 200 */
         margin: 0;
         overflow: hidden;
+        font-family: 'Fredoka', sans-serif; /* Cartoon font */
+        color: #1e293b; /* Slate 800 */
       }
 
-      /* Glassmorphism & Neon Utilities */
+      /* Light Mode Glassmorphism */
       .glass-panel {
-        background: rgba(15, 23, 42, 0.85);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        background: rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 2px solid rgba(255, 255, 255, 0.8);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        color: #334155;
+        border-radius: 20px;
       }
 
-      .text-glow {
-        text-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
-      }
-      
-      .text-glow-red {
-        text-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+      .text-stroke {
+         -webkit-text-stroke: 2px white;
+         paint-order: stroke fill;
       }
 
-      /* Chest Animations */
       @keyframes shake {
         0%, 100% { transform: translate(0, 0) rotate(0deg); }
         25% { transform: translate(-5px, 5px) rotate(-5deg); }
@@ -75,7 +81,7 @@
 }
 </script>
 </head>
-  <body class="text-white font-sans">
+  <body class="text-slate-800 font-sans">
     <div id="root"></div>
   </body>
 </html>

@@ -13,9 +13,10 @@ import { HUD } from './components/HUD';
 import { InspectorPanel } from './components/InspectorPanel';
 import { audioManager, SOUND_MAP } from './services/audioManager';
 import { Log } from './services/Log';
+import { ShoppingBag, Swords } from 'lucide-react';
 
 export default function App() {
-  const { phase, setPhase, initGame, stats, startNextWave, applyDraft, setInspectedEntity, buyBrotatoItem, endWaveAndGoToShop } = useGameStore();
+  const { phase, setPhase, initGame, stats, startNextWave, applyDraft, setInspectedEntity, buyBrotatoItem, endWaveAndGoToShop, showPermanentLevelUp } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const waveStartedRef = useRef(0);
@@ -113,7 +114,7 @@ export default function App() {
         } else {
              Log.i('EngineControl', `New wave detected. Deferring engine start to WaveSync.`);
         }
-    } else if (phase === GamePhase.SHOP && !showLevelUp) {
+    } else if (phase === GamePhase.SHOP && !showLevelUp && !showPermanentLevelUp) {
         Log.i('EngineControl', `Phase is SHOP. Ensuring engine is RUNNING for UI.`);
         engineRef.current?.start();
         audioManager.stopMusic();
@@ -122,7 +123,7 @@ export default function App() {
         audioManager.stopMusic();
         engineRef.current?.stop();
     }
-  }, [phase, showLevelUp, stats.wave]);
+  }, [phase, showLevelUp, showPermanentLevelUp, stats.wave]);
   
   useEffect(() => {
     Log.i('WaveSync', `Checking if wave should start. Phase: ${phase}, ShowLevelUp: ${showLevelUp}, WaveRef: ${waveStartedRef.current}, StoreWave: ${stats.wave}`);
@@ -156,15 +157,20 @@ export default function App() {
 
   const handleDraftSelect = (option: DraftOption) => {
       Log.i('App', `Draft selected: ${option.name}. Resuming combat.`);
-      applyDraft(option);
+      applyDraft(option, false);
       setShowLevelUp(false);
   };
 
+  const handlePermanentDraftSelect = (option: DraftOption) => {
+      Log.i('App', `Permanent Draft selected: ${option.name}.`);
+      applyDraft(option, true);
+  };
+
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-white font-sans relative overflow-hidden">
+    <div className="flex h-screen w-full items-center justify-center bg-sky-200 text-slate-800 font-sans relative overflow-hidden">
       
       <div 
-        className="relative shadow-2xl border border-slate-800 bg-slate-900 rounded-lg overflow-hidden"
+        className="relative shadow-2xl border-4 border-white bg-sky-300 rounded-3xl overflow-hidden"
         style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
       >
         <canvas 
@@ -179,13 +185,33 @@ export default function App() {
         {phase === GamePhase.GAME_OVER && <GameOverScreen currentWave={stats.wave} onRestart={handleRestart} />}
         {showLevelUp && <LevelUpModal onSelect={handleDraftSelect} level={stats.level} />}
         
+        {/* Permanent Level Up Modal (From Shop) */}
+        {showPermanentLevelUp && <LevelUpModal onSelect={handlePermanentDraftSelect} level={stats.heroLevel} isPermanent={true} />}
+        
         {phase === GamePhase.SHOP && (
             <Shop 
-              onBuyItem={buyBrotatoItem} 
-              onNextWave={startNextWave}
               isVisible={isShopVisible}
               onVisibilityChange={setShopVisible}
             />
+        )}
+        
+        {phase === GamePhase.SHOP && !isShopVisible && (
+            <div className="absolute bottom-8 right-8 z-[60] pointer-events-auto flex items-center gap-4">
+                <button 
+                    onClick={() => setShopVisible(true)}
+                    className="flex items-center gap-3 px-6 py-4 bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black rounded-full shadow-lg hover:scale-105 transition-all animate-bounce"
+                >
+                    <ShoppingBag size={24} />
+                    打开商店
+                </button>
+                <button 
+                    onClick={startNextWave}
+                    className="flex items-center gap-3 px-8 py-4 bg-red-500 hover:bg-red-400 text-white font-black rounded-full shadow-lg hover:scale-105 transition-all"
+                >
+                    <Swords size={24} />
+                    开始战斗
+                </button>
+            </div>
         )}
 
         {/* HUD and side panels, visible during combat and shop phases */}

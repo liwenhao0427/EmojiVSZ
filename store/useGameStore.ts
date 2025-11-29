@@ -1,7 +1,7 @@
 
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem, HeroUpgradeStatus } from '../types';
-import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS } from '../constants';
+import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 import { ITEMS_DATA } from '../data/items';
 import { UNIT_DATA } from '../data/units';
@@ -27,20 +27,25 @@ interface GameStore {
   allItems: BrotatoItem[];
   ownedItems: Record<string, number>; // Map of item.id -> count
   
-  // Hero Upgrade Tracking (Resets every wave)
-  heroUpgradeStatus: HeroUpgradeStatus;
+  // Hero Upgrade Tracking
+  heroUpgradeStatus: HeroUpgradeStatus; // Current Wave Status
+  permanentHeroUpgradeStatus: HeroUpgradeStatus; // Permanent Status (Base for next wave)
+  
+  // UI State
+  showPermanentLevelUp: boolean;
 
   // Actions
   setPhase: (phase: GamePhase) => void;
   initGame: () => void;
   moveUnit: (unitId: string, targetRow: number, targetCol: number) => void;
   addUnit: (item: UnitData | Partial<Unit>) => boolean;
-  applyDraft: (option: DraftOption) => void;
+  applyDraft: (option: DraftOption, isPermanent?: boolean) => void;
   setInspectedEntity: (entity: InspectableEntity) => void;
   buyBrotatoItem: (item: BrotatoItem) => void;
   moveAmmo: (activeId: string, overId: string) => void;
   triggerManualExplosion: (unitId: string) => void;
-
+  buyExperience: (amount: number, cost: number) => void;
+  sellUnit: (unitId: string) => { refund: number, x: number, y: number } | null;
 
   // Engine Sync Actions
   damageUnit: (unitId: string, amount: number) => void;
@@ -52,17 +57,28 @@ interface GameStore {
   updateUltTimer: (dt: number) => void;
 }
 
+const initialUpgradeStatus: HeroUpgradeStatus = { 
+    multishot: 0, 
+    effect: 0, 
+    bounce: 0, 
+    damage: 0, 
+    attackSpeed: 0, 
+    ultimate: 0 
+};
+
 const calculateFinalStats = (ownedItems: Record<string, number>, allItems: BrotatoItem[], currentStats: PlayerStats): PlayerStats => {
     const newStats: PlayerStats = { 
         ...INITIAL_STATS,
         gold: currentStats.gold,
         wave: currentStats.wave,
-        level: currentStats.level,
-        xp: currentStats.xp,
-        maxXp: currentStats.maxXp,
+        // Preserve Permanent Progression
         heroLevel: currentStats.heroLevel,
         heroXp: currentStats.heroXp,
         heroMaxXp: currentStats.heroMaxXp,
+        // Reset Combat stats to Permanent stats (will be overwritten by items below if items add to them, but items add to base)
+        level: currentStats.heroLevel,
+        xp: currentStats.heroXp,
+        maxXp: currentStats.heroMaxXp,
     };
     
     const itemMap = new Map(allItems.map(i => [i.id, i]));
@@ -94,7 +110,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   inspectedEntity: null,
   allItems: ITEMS_DATA,
   ownedItems: {},
-  heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 },
+  heroUpgradeStatus: { ...initialUpgradeStatus },
+  permanentHeroUpgradeStatus: { ...initialUpgradeStatus },
+  showPermanentLevelUp: false,
 
   setPhase: (phase) => set({ phase }),
   
@@ -145,7 +163,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       draftOptions: [],
       inspectedEntity: null,
       ownedItems: {},
-      heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 },
+      heroUpgradeStatus: { ...initialUpgradeStatus },
+      permanentHeroUpgradeStatus: { ...initialUpgradeStatus },
+      showPermanentLevelUp: false,
     });
   },
 
@@ -189,6 +209,67 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     return false;
   },
+  
+  sellUnit: (unitId: string) => {
+      const { gridUnits, stats } = get();
+      const unitIndex = gridUnits.findIndex(u => u.id === unitId);
+      if (unitIndex === -1) return null;
+
+      const unit = gridUnits[unitIndex];
+      if (unit.isHero) return null; // Cannot sell hero
+
+      const unitData = Object.values(UNIT_DATA).find(ud => ud.name === unit.name);
+      if (!unitData) return null;
+
+      const refund = Math.floor(unitData.price * 0.5);
+
+      set({
+          stats: { ...stats, gold: stats.gold + refund },
+          gridUnits: gridUnits.filter(u => u.id !== unitId)
+      });
+      
+      const x = GRID_OFFSET_X + unit.col * CELL_SIZE + CELL_SIZE / 2;
+      const y = GRID_OFFSET_Y + unit.row * CELL_SIZE + CELL_SIZE / 2;
+
+      return { refund, x, y };
+  },
+  
+  buyExperience: (amount, cost) => {
+      set(state => {
+          if (state.stats.gold < cost) return {};
+          
+          let newXp = state.stats.heroXp + amount;
+          let newMaxXp = state.stats.heroMaxXp;
+          let newLevel = state.stats.heroLevel;
+          let currentGold = state.stats.gold - cost;
+          let leveledUp = false;
+          
+          // Handle leveling up in shop
+          while (newXp >= newMaxXp) {
+              newXp -= newMaxXp;
+              newLevel += 1;
+              newMaxXp = Math.floor(newMaxXp * 1.5);
+              leveledUp = true;
+          }
+          
+          // Sync combat stats with permanent stats immediately if in Shop
+          return {
+              stats: {
+                  ...state.stats,
+                  gold: currentGold,
+                  // Update Permanent Stats
+                  heroXp: newXp,
+                  heroMaxXp: newMaxXp,
+                  heroLevel: newLevel,
+                  // Sync visuals
+                  xp: newXp,
+                  maxXp: newMaxXp,
+                  level: newLevel
+              },
+              showPermanentLevelUp: leveledUp || state.showPermanentLevelUp
+          };
+      });
+  },
 
   buyBrotatoItem: (item) => {
     set(state => {
@@ -209,51 +290,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   moveAmmo: (activeId: string, overId: string) => {
-    if (activeId === overId) return;
-
-    set(state => {
-        const { ammoState } = state;
-        const newAmmoState = JSON.parse(JSON.stringify(ammoState));
-
-        let activeContainer: string | undefined;
-        let overContainer: string | undefined;
-        let activeIndex = -1;
-        let overIndex = -1;
-        let activeItem: AmmoItem | undefined;
-
-        for (const containerId in newAmmoState) {
-            const index = newAmmoState[containerId].findIndex(item => item.id === activeId);
-            if (index !== -1) {
-                activeContainer = containerId;
-                activeIndex = index;
-                activeItem = newAmmoState[containerId][index];
-                break;
-            }
-        }
-
-        for (const containerId in newAmmoState) {
-            const index = newAmmoState[containerId].findIndex(item => item.id === overId);
-            if (index !== -1) {
-                overContainer = containerId;
-                overIndex = index;
-                break;
-            }
-        }
-        
-        if (!overContainer && newAmmoState[overId]) {
-          overContainer = overId;
-          overIndex = newAmmoState[overId].length;
-        }
-        
-        if (!activeItem || !activeContainer || !overContainer) {
-            return {};
-        }
-        
-        newAmmoState[activeContainer].splice(activeIndex, 1);
-        newAmmoState[overContainer].splice(overIndex, 0, activeItem);
-
-        return { ammoState: newAmmoState };
-    });
+    // Legacy support removal - stub
+    return {};
   },
 
   moveUnit: (unitId, tRow, tCol) => {
@@ -351,16 +389,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   endWaveAndGoToShop: () => {
     set(state => {
-      Log.i('Store', `endWaveAndGoToShop: phase -> SHOP. Current wave is still ${state.stats.wave}.`);
+      Log.i('Store', `endWaveAndGoToShop: phase -> SHOP.`);
       const nextUnits = state.gridUnits
         .filter(u => !u.isTemp) 
         .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
       
       const baseStats = calculateFinalStats(state.ownedItems, state.allItems, state.stats);
+      
+      // Apply permanent hero upgrades to stats for shop display
+      const permStatus = state.permanentHeroUpgradeStatus;
+      baseStats.heroDamageMult = (permStatus.damage * 0.25) + (permStatus.ultimate >= 2 ? 0.25 : 0);
+      baseStats.heroAttackSpeedMult = permStatus.attackSpeed * 0.15;
+
+      // Clear Wave Temporary Buffs (from in-wave level ups)
       baseStats.tempDamageMult = 0;
       baseStats.tempAttackSpeedMult = 0;
-      baseStats.heroTempDamageMult = 0;
-      baseStats.heroTempAttackSpeedMult = 0;
+      
+      // Reset Combat XP/Level to Permanent Hero Status for the UI
+      baseStats.level = baseStats.heroLevel;
+      baseStats.xp = baseStats.heroXp;
+      baseStats.maxXp = baseStats.heroMaxXp;
 
       return {
         gridUnits: nextUnits,
@@ -373,46 +421,89 @@ export const useGameStore = create<GameStore>((set, get) => ({
   startNextWave: () => {
     set(state => {
       Log.i('Store', `startNextWave: phase -> COMBAT, wave -> ${state.stats.wave + 1}.`);
+      
+      const startingStatus = { ...state.permanentHeroUpgradeStatus };
+
       const unitsWithResetHero = state.gridUnits.map(u => {
         if (u.isHero) {
-          // FIX: Add 'as const' to ensure TypeScript infers 'LINEAR' as a literal type,
-          // not a generic string, which resolves the type incompatibility with the Unit interface.
-          return { ...u, attackType: 'LINEAR' as const, effects: {} };
+          // Re-apply permanent upgrades based on status
+          let type: 'LINEAR' | 'DOUBLE_SHOT' | 'TRI_SHOT' | 'PENTA_SHOT' = 'LINEAR';
+          
+          if (startingStatus.multishot === 1) type = 'DOUBLE_SHOT';
+          if (startingStatus.multishot === 2) type = 'TRI_SHOT';
+          if (startingStatus.multishot === 3) type = 'PENTA_SHOT';
+          
+          let newEffects: Record<string, any> = {};
+          if (startingStatus.effect >= 1) newEffects.is_tracking = true;
+          if (startingStatus.effect >= 2) newEffects.burn_chance = 100;
+          if (startingStatus.effect >= 3) newEffects.explode_on_hit = 1;
+          if (startingStatus.effect >= 4) newEffects.chain_explosion = 1;
+          
+          if (startingStatus.bounce >= 1) newEffects.bounceCount = 1;
+          if (startingStatus.bounce >= 2) newEffects.bounceCount = 2;
+          if (startingStatus.bounce >= 3) newEffects.bounceCount = 4;
+          if (startingStatus.bounce >= 4) newEffects.bounceCount = 10;
+
+          return { ...u, attackType: type, effects: newEffects };
         }
         return u;
       });
+      
+      const nextStats = { ...state.stats };
+      nextStats.wave = state.stats.wave + 1;
+      nextStats.level = state.stats.heroLevel;
+      nextStats.xp = state.stats.heroXp;
+      nextStats.maxXp = state.stats.heroMaxXp;
+      
+      // Apply Ultimate Upgrades that affect stats
+      if (startingStatus.ultimate >= 1) nextStats.ult_duration_bonus = (nextStats.ult_duration_bonus || 0) + 1;
+      if (startingStatus.ultimate >= 3) nextStats.heroEnergyGainRate = (nextStats.heroEnergyGainRate || 1.0) + 0.25;
 
       return {
         gridUnits: unitsWithResetHero,
-        stats: {
-          ...state.stats,
-          wave: state.stats.wave + 1,
-          level: 1,
-          xp: 0,
-          maxXp: INITIAL_STATS.maxXp,
-        },
+        stats: nextStats,
         phase: GamePhase.COMBAT,
-        heroUpgradeStatus: { multishot: 0, effect: 0, bounce: 0 },
+        heroUpgradeStatus: startingStatus,
       };
     });
   },
 
-  applyDraft: (option) => {
+  applyDraft: (option, isPermanent = false) => {
     set(state => {
-      const nextState: Partial<Pick<GameStore, 'gridUnits' | 'stats' | 'heroUpgradeStatus'>> = {}; 
+      const nextState: Partial<Pick<GameStore, 'gridUnits' | 'stats' | 'heroUpgradeStatus' | 'permanentHeroUpgradeStatus' | 'showPermanentLevelUp'>> = {}; 
+      
+      if (isPermanent) {
+          nextState.showPermanentLevelUp = false;
+      }
 
       if (option.type === 'TEMP_UNIT') {
         get().addUnit({ ...option.data, isTemp: true });
       } else if (option.type === 'HERO_UPGRADE') {
           const upgradeData = option.data as any;
-          if (upgradeData.upgradePath) {
-              const currentStatus = { ...state.heroUpgradeStatus };
-              currentStatus[upgradeData.upgradePath as keyof HeroUpgradeStatus] = upgradeData.upgradeLevel;
-              nextState.heroUpgradeStatus = currentStatus;
-          }
-
           const nextStats = { ...state.stats };
-          if (upgradeData.heroDamage) nextStats.heroTempDamageMult = (nextStats.heroTempDamageMult || 0) + upgradeData.heroDamage;
+          
+          if (upgradeData.upgradePath) {
+              const path = upgradeData.upgradePath as keyof HeroUpgradeStatus;
+              
+              if (isPermanent) {
+                  const permStatus = { ...state.permanentHeroUpgradeStatus };
+                  permStatus[path] = (permStatus[path] || 0) + 1;
+                  nextState.permanentHeroUpgradeStatus = permStatus;
+              } else {
+                  const currentStatus = { ...state.heroUpgradeStatus };
+                  currentStatus[path] = (currentStatus[path] || 0) + 1;
+                  nextState.heroUpgradeStatus = currentStatus;
+              }
+          }
+          
+          // Apply numeric stats immediately for both permanent and temp upgrades
+          if (upgradeData.heroDamage) nextStats.heroDamageMult = (nextStats.heroDamageMult || 0) + upgradeData.heroDamage;
+          if (upgradeData.heroAttackSpeed) nextStats.heroAttackSpeedMult = (nextStats.heroAttackSpeedMult || 0) + upgradeData.heroAttackSpeed;
+
+          // These affect stats directly and aren't multipliers
+          if (upgradeData.heroEnergyGainRate) nextStats.heroEnergyGainRate = (nextStats.heroEnergyGainRate || 1) + upgradeData.heroEnergyGainRate;
+          if (upgradeData.extraEffects?.ult_duration_bonus) nextStats.ult_duration_bonus = (nextStats.ult_duration_bonus || 0) + upgradeData.extraEffects.ult_duration_bonus;
+
           nextState.stats = nextStats;
           
           const units = [...state.gridUnits];
@@ -433,8 +524,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         if (buff.damage) nextStats.tempDamageMult = (nextStats.tempDamageMult || 0) + buff.damage;
         if (buff.attackSpeed) nextStats.tempAttackSpeedMult = (nextStats.tempAttackSpeedMult || 0) + buff.attackSpeed;
-        if (buff.heroDamage) nextStats.heroTempDamageMult = (nextStats.heroTempDamageMult || 0) + buff.heroDamage;
-        if (buff.heroAttackSpeed) nextStats.heroTempAttackSpeedMult = (nextStats.heroTempAttackSpeedMult || 0) + buff.heroAttackSpeed;
+        if (buff.heroDamage) nextStats.heroDamageMult = (nextStats.heroDamageMult || 0) + buff.heroDamage;
+        if (buff.heroAttackSpeed) nextStats.heroAttackSpeedMult = (nextStats.heroAttackSpeedMult || 0) + buff.heroAttackSpeed;
         if (buff.heroEnergyGainRate) nextStats.heroEnergyGainRate = (nextStats.heroEnergyGainRate || 1.0) + buff.heroEnergyGainRate;
         if (buff.heroMaxEnergy) nextStats.heroMaxEnergy = Math.max(20, (nextState.stats.heroMaxEnergy || 100) + buff.heroMaxEnergy);
 

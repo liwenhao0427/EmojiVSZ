@@ -1,5 +1,7 @@
 
 
+
+
 import { PlayerStats, Unit, Rarity } from './types';
 
 export const CANVAS_WIDTH = 1200; 
@@ -36,12 +38,11 @@ export const INITIAL_STATS: PlayerStats = {
   meleeDmg: 0,
   rangedDmg: 0,
   elementalDmg: 0,
-  engineering: 0,
 
   tempDamageMult: 0,
   tempAttackSpeedMult: 0,
-  heroTempDamageMult: 0,
-  heroTempAttackSpeedMult: 0,
+  heroDamageMult: 0,
+  heroAttackSpeedMult: 0,
   wave: 1,
   
   heroEnergyGainRate: 1.0,
@@ -88,7 +89,6 @@ export const AMMO_TYPE_MAP: Record<string, string> = {
   ROCKET: 'Rocket',
   MAGIC: 'Magic',
   MELEE: 'Melee',
-  ENGINEERING: 'Tech'
 };
 
 export const KEYWORD_DEFINITIONS: Record<string, string> = {

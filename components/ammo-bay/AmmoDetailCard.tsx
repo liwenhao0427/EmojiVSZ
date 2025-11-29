@@ -36,12 +36,14 @@ export const AmmoDetailCard: React.FC<{ item: AmmoItem; isPinned: boolean; onClo
   if (item.weaponClass === 'MELEE') flatBonus = stats.meleeDmg;
   if (item.weaponClass === 'RANGED') flatBonus = stats.rangedDmg;
   if (item.weaponClass === 'MAGIC') flatBonus = stats.elementalDmg; 
-  if (item.weaponClass === 'ENGINEERING') flatBonus = stats.engineering;
-  const finalDamage = Math.round((item.damage + flatBonus) * (1 + stats.damagePercent / 100));
+  // FIX: Added safe access for engineering stat and corrected damage calculation logic.
+  if (item.weaponClass === 'ENGINEERING') flatBonus = stats.engineering || 0;
+  const finalDamage = Math.round((item.damage + flatBonus) * (1 + (stats.damagePercent || 0)));
 
   // Attack Speed (Seconds per shot)
   // Formula: Cooldown / (1 + AtkSpeed%)
-  const finalCooldown = item.cooldown / (1 + stats.attackSpeed / 100);
+  // FIX: Corrected attack speed calculation logic.
+  const finalCooldown = item.cooldown / (1 + (stats.attackSpeed || 0));
 
   const generateDescription = () => {
       // Use the static description from constants if available
@@ -97,10 +99,11 @@ export const AmmoDetailCard: React.FC<{ item: AmmoItem; isPinned: boolean; onClo
                     <div className="text-white font-mono text-sm">{finalDamage}</div>
                 </div>
                 {/* Tooltip */}
+                {/* FIX: Updated tooltip to show correct calculation. */}
                 <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 w-full bg-black/90 p-2 rounded border border-white/10 z-10 whitespace-nowrap">
                     Base: {item.damage} <br/>
                     + Flat: {flatBonus} <br/>
-                    x Pct: {100 + stats.damagePercent}%
+                    x Pct: {((1 + (stats.damagePercent || 0)) * 100).toFixed(0)}%
                 </div>
             </div>
 
@@ -112,10 +115,11 @@ export const AmmoDetailCard: React.FC<{ item: AmmoItem; isPinned: boolean; onClo
                     <div className="text-white font-mono text-sm">{finalCooldown.toFixed(2)}s</div>
                 </div>
                  {/* Tooltip */}
+                 {/* FIX: Updated tooltip to show correct calculation. */}
                  <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 w-full bg-black/90 p-2 rounded border border-white/10 z-10 whitespace-nowrap">
                     Base: {item.cooldown}s <br/>
-                    Player Spd: {100 + stats.attackSpeed}% <br/>
-                    Formula: {item.cooldown} / {(1 + stats.attackSpeed/100).toFixed(2)}
+                    Player Spd: {((1 + (stats.attackSpeed || 0)) * 100).toFixed(0)}% <br/>
+                    Formula: {item.cooldown} / {(1 + (stats.attackSpeed || 0)).toFixed(2)}
                 </div>
             </div>
 

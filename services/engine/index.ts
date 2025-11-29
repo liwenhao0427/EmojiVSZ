@@ -10,6 +10,7 @@ import { ProjectileSystem } from './systems/ProjectileSystem';
 import { FloatingTextSystem } from './systems/FloatingTextSystem';
 import { InspectionSystem } from './systems/InspectionSystem';
 import { Log } from '../Log';
+import { GRID_COLS, GRID_ROWS } from '../../constants';
 
 export interface EngineCallbacks {
   onGainLoot?: (xp: number, gold: number) => void;
@@ -57,7 +58,7 @@ export class GameEngine {
     this.unitSystem = new UnitSystem();
 
     // 2. Resolve circular dependency between Input and Inspection systems
-    this.inputSystem = new InputSystem(this.canvas);
+    this.inputSystem = new InputSystem(this.canvas, this);
     this.inspectionSystem = new InspectionSystem(this.inputSystem);
     this.inputSystem.setInspectionSystem(this.inspectionSystem);
 
@@ -113,6 +114,22 @@ export class GameEngine {
     this.stop();
     this.inputSystem.cleanup();
   }
+  
+  public handleRightClick(x: number, y: number) {
+      const store = useGameStore.getState();
+      if (store.phase !== GamePhase.SHOP) return;
+
+      const { c, r } = this.inputSystem.getGridPosFromCoords(x, y);
+      if (c < 0 || c >= GRID_COLS || r < 0 || r >= GRID_ROWS) return;
+
+      const unit = store.gridUnits.find(u => u.row === r && u.col === c);
+      if (unit) {
+        const result = store.sellUnit(unit.id);
+        if (result) {
+          this.floatingTextSystem.addText(this.gameState, result.x, result.y - 20, `+${result.refund}G`, 'yellow');
+        }
+      }
+  }
 
   private loop = (timestamp: number) => {
     if (!this.isRunning) return;
@@ -132,6 +149,9 @@ export class GameEngine {
     
     this.renderingSystem.update(dt);
     this.inspectionSystem.update(dt, this.gameState, this.callbacks);
+    
+    // Always update floating text, even in shop
+    this.floatingTextSystem.update(dt, this.gameState, this.callbacks);
 
     if (store.phase !== GamePhase.COMBAT) return;
 
@@ -149,7 +169,6 @@ export class GameEngine {
     this.enemySystem.update(dt, this.gameState, this.callbacks);
     this.unitSystem.update(dt, this.gameState, this.callbacks, this.projectileSystem);
     this.projectileSystem.update(dt, this.gameState, this.callbacks);
-    this.floatingTextSystem.update(dt, this.gameState, this.callbacks);
 
     if (timestamp - this.lastTimerUpdate > 1000) {
       this.callbacks.onTimeUpdate?.(Math.ceil(Math.max(0, this.gameState.waveTime)));

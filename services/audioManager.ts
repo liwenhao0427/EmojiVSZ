@@ -5,10 +5,7 @@ class AudioManager {
   private musicSource: AudioBufferSourceNode | null = null;
   private soundSources: Set<AudioBufferSourceNode> = new Set();
   
-  private constructor() {
-    // We need a user interaction to create the AudioContext.
-    // It will be initialized on the first play/load call.
-  }
+  private constructor() {}
 
   public static getInstance(): AudioManager {
     if (!AudioManager.instance) {
@@ -56,7 +53,6 @@ class AudioManager {
     this.initContext();
     if (!this.audioContext || !this.buffers.has(key)) return;
     
-    // Resume context if it's suspended
     if (this.audioContext.state === 'suspended') {
         this.audioContext.resume();
     }
@@ -106,12 +102,12 @@ class AudioManager {
 }
 
 export const SOUND_MAP = {
-    music: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/bg-music.mp3',
-    shoot: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/laser-shot.mp3',
-    hit: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/hit.mp3',
-    death: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/explosion.mp3',
+    // Upbeat, casual polka-style loop suitable for SAP-like games
+    music: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/345_polka_loop.mp3', 
+    shoot: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/plop.mp3', 
+    hit: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/hit_cartoon.mp3',
+    death: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/cartoon_fail.mp3',
     swing: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/whoosh.mp3'
 };
-
 
 export const audioManager = AudioManager.getInstance();

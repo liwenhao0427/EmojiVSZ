@@ -3,30 +3,33 @@ import React from 'react';
 import { InspectableEntity, Unit } from '../types';
 import { Sword, Wind, Target, Activity, Crosshair } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
-import { CELL_SIZE } from '../constants';
+import { CELL_SIZE, CANVAS_WIDTH, GRID_COLS } from '../constants';
 
 interface InspectorPanelProps {
   entity: InspectableEntity;
 }
 
 const ATTACK_PATTERN_MAP: Record<string, string> = {
-    SHOOT: '定点射击 (Shoot)',
-    THRUST: '近战突刺 (Thrust)',
-    SWING: '扇形挥砍 (Swing)',
-    STREAM: '持续喷射 (Stream)',
-    NONE: '被动/无 (Passive)'
+    SHOOT: '定点射击',
+    THRUST: '近战突刺',
+    SWING: '扇形挥砍',
+    STREAM: '持续喷射',
+    NONE: '被动/无'
 };
 
-const StatRow = ({ icon: Icon, label, value, tooltip, color }: any) => (
-    <div className="group relative flex justify-between items-center py-2 border-b border-white/5 last:border-0">
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+const StatRow = ({ icon: Icon, label, value, tooltip, color, tooltipOnRight }: any) => (
+    <div className="group relative flex justify-between items-center py-2 border-b border-slate-100 last:border-0 pointer-events-auto">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
             <Icon size={14} className={color}/>
-            <span className="cursor-help decoration-dotted underline underline-offset-2">{label}</span>
+            <span className="cursor-help decoration-dotted underline underline-offset-2 decoration-slate-300">{label}</span>
         </div>
-        <div className="font-mono font-bold text-sm">{value}</div>
+        <div className="font-mono font-bold text-sm text-slate-700">{value}</div>
         
         {/* Tooltip */}
-        <div className="hidden group-hover:block absolute right-full top-0 mr-2 w-48 bg-black/90 p-2 rounded border border-white/20 z-50 text-[10px] text-gray-300 pointer-events-none whitespace-pre-wrap">
+        <div className={`
+            hidden group-hover:block absolute top-0 w-52 bg-slate-800 text-white p-3 rounded-xl shadow-xl z-50 text-xs pointer-events-none whitespace-pre-wrap leading-relaxed
+            ${tooltipOnRight ? 'left-full ml-4' : 'right-full mr-4'}
+        `}>
             {tooltip}
         </div>
     </div>
@@ -38,7 +41,6 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
   const isUnit = entity.type === 'UNIT';
   const { data, statsBreakdown } = entity;
 
-  // Calculate dynamic stats for Units based on global player stats
   let finalDamage = Math.round(
       (statsBreakdown.damage.base + statsBreakdown.damage.bonus) * statsBreakdown.damage.multiplier
   );
@@ -49,8 +51,31 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
       finalCooldown = statsBreakdown.cooldown.base.toFixed(2);
   }
 
-  let dmgTooltip = `基础: ${statsBreakdown.damage.base}\n加成: +${statsBreakdown.damage.bonus}\n倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
-  let cdTooltip = `基础: ${statsBreakdown.cooldown.base}s\n倍率: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
+  // Build the tooltip string.
+  let dmgTooltip = `基础: ${statsBreakdown.damage.base}\n加成: +${statsBreakdown.damage.bonus}`;
+  let cdTooltip = `基础: ${statsBreakdown.cooldown.base}s`;
+
+  if (isUnit && statsBreakdown.damage.breakdown) {
+      const db = statsBreakdown.damage.breakdown;
+      const cb = statsBreakdown.cooldown.breakdown;
+
+      const dmgMultiplierParts = [
+          `全局: x${(1 + db.globalPct).toFixed(2)}`,
+          db.heroPct > 0 ? `英雄: x${(1 + db.heroPct).toFixed(2)}` : null,
+          db.tempPct > 0 ? `临时: x${(1 + db.tempPct).toFixed(2)}` : null
+      ].filter(Boolean).join('\n');
+      dmgTooltip += `\n---\n${dmgMultiplierParts}\n总倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
+      
+      const cdMultiplierParts = [
+          `全局: x${(1 + cb.globalPct).toFixed(2)}`,
+          cb.heroPct > 0 ? `英雄: x${(1 + cb.heroPct).toFixed(2)}` : null,
+          cb.tempPct > 0 ? `临时: x${(1 + cb.tempPct).toFixed(2)}` : null
+      ].filter(Boolean).join('\n');
+      cdTooltip += `\n---\n${cdMultiplierParts}\n总倍率: x${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
+  } else {
+      dmgTooltip += `\n倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
+      cdTooltip += `\n倍率: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
+  }
 
   const hpPct = Math.max(0, data.hp / data.maxHp) * 100;
 
@@ -62,19 +87,27 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
       ? ATTACK_PATTERN_MAP[(data as Unit).attackPattern || 'NONE'] 
       : null;
 
+  // Determine Position Logic
+  const entityIsOnRight = isUnit 
+      ? (data as Unit).col >= GRID_COLS / 2 
+      : (data as any).x > CANVAS_WIDTH / 2;
+  
+  const panelPositionClass = entityIsOnRight ? 'left-4' : 'right-4';
+  const tooltipOnRight = entityIsOnRight; // If panel is on left, tooltip should be on right
+
   return (
-    <div className="absolute right-4 top-24 w-64 glass-panel rounded-xl p-4 border border-white/10 animate-in slide-in-from-right duration-300 pointer-events-auto">
+    <div className={`absolute ${panelPositionClass} top-24 w-64 glass-panel p-5 animate-in slide-in-from-${entityIsOnRight ? 'left' : 'right'} duration-300 pointer-events-none shadow-2xl shadow-blue-900/10 transition-all`}>
         
         {/* Header */}
-        <div className="flex items-center gap-4 mb-3">
-            <div className="w-14 h-14 bg-slate-800 rounded-lg flex items-center justify-center text-4xl shadow-inner border border-white/5">
+        <div className="flex items-center gap-4 mb-4">
+            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-4xl shadow-sm border border-slate-100">
                 {data.emoji}
             </div>
             <div>
-                <h3 className="font-bold text-white leading-tight">
+                <h3 className="font-black text-slate-800 text-lg leading-tight mb-1">
                     {('name' in data ? data.name : 'Unknown')}
                 </h3>
-                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isUnit ? 'bg-blue-900 text-blue-300' : 'bg-red-900 text-red-300'}`}>
+                <span className={`text-[10px] px-2 py-1 rounded-lg font-bold uppercase tracking-wider ${isUnit ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
                     {isUnit ? (data as any).type : (data as any).type}
                 </span>
             </div>
@@ -82,18 +115,18 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
         
         {/* Description */}
         {data.description && (
-            <p className="text-xs text-gray-300 mb-3 bg-black/20 p-2 rounded border border-white/5 leading-normal">
+            <div className="text-xs font-bold text-slate-500 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-normal">
                 {data.description}
-            </p>
+            </div>
         )}
 
         {/* Health Bar */}
-        <div className="mb-4">
-            <div className="flex justify-between text-[10px] text-gray-400 mb-1 font-mono">
+        <div className="mb-5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <div className="flex justify-between text-[10px] text-slate-400 mb-1.5 font-bold">
                 <span>HP</span>
-                <span>{Math.ceil(data.hp)} / {data.maxHp}</span>
+                <span className="font-mono text-slate-600">{Math.ceil(data.hp)} / {data.maxHp}</span>
             </div>
-            <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
                 <div 
                     className={`h-full transition-all duration-200 ${isUnit ? 'bg-green-500' : 'bg-red-500'}`} 
                     style={{ width: `${hpPct}%` }}
@@ -102,37 +135,41 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
         </div>
 
         {/* Stats Grid */}
-        <div className="bg-black/20 rounded-lg p-3">
+        <div className="bg-white rounded-xl border border-slate-100 p-3 shadow-sm pointer-events-auto">
              <StatRow 
                 icon={Sword} 
                 label="伤害" 
                 value={finalDamage} 
-                color="text-red-400"
+                color="text-red-500"
                 tooltip={dmgTooltip}
+                tooltipOnRight={tooltipOnRight}
              />
              <StatRow 
                 icon={Wind} 
                 label="冷却" 
                 value={`${finalCooldown}s`} 
-                color="text-yellow-400"
+                color="text-yellow-500"
                 tooltip={cdTooltip}
+                tooltipOnRight={tooltipOnRight}
              />
              {'range' in data && (
                  <StatRow 
                     icon={Target} 
                     label="射程" 
                     value={displayRange}
-                    color="text-cyan-400"
+                    color="text-blue-500"
                     tooltip={`实际像素: ${rangeInPixels} px`}
+                    tooltipOnRight={tooltipOnRight}
                  />
              )}
              {attackPatternDisplay && (
                  <StatRow 
                     icon={Crosshair} 
-                    label="攻击模式" 
+                    label="模式" 
                     value={attackPatternDisplay.split(' ')[0]} 
-                    color="text-purple-400"
+                    color="text-purple-500"
                     tooltip={attackPatternDisplay}
+                    tooltipOnRight={tooltipOnRight}
                  />
              )}
              {'speed' in data && (
@@ -140,14 +177,15 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
                     icon={Activity} 
                     label="速度" 
                     value={(data as any).speed} 
-                    color="text-orange-400"
+                    color="text-orange-500"
                     tooltip="移动速度 (像素/秒)"
+                    tooltipOnRight={tooltipOnRight}
                  />
              )}
         </div>
 
-        <div className="mt-4 text-[10px] text-gray-500 text-center italic">
-            点击实体可锁定/解锁视图
+        <div className="mt-4 text-[10px] text-slate-400 text-center font-bold">
+            点击实体锁定视图
         </div>
     </div>
   );

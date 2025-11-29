@@ -4,7 +4,7 @@ import { GameState } from '../GameState';
 import { EngineCallbacks } from '../index';
 import { useGameStore } from '../../../store/useGameStore';
 import { GRID_COLS, GRID_ROWS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../../../constants';
-import { InspectableEntity, StatsBreakdown } from '../../../types';
+import { InspectableEntity, StatsBreakdown, Unit, PlayerStats } from '../../../types';
 import { InputSystem } from './InputSystem';
 
 export class InspectionSystem implements System {
@@ -54,17 +54,10 @@ export class InspectionSystem implements System {
 
   private refreshInspectionData(id: string | number, gameState: GameState, callbacks: EngineCallbacks) {
     const store = useGameStore.getState();
-    const { stats } = store;
-    
     if (typeof id === 'string') {
       const unit = store.gridUnits.find(u => u.id === id);
       if (unit) {
-        const typeBonus = this.getTypeBonus(unit.type, stats);
-        const breakdown: StatsBreakdown = {
-          damage: { base: unit.damage, bonus: typeBonus, multiplier: 1 + stats.damagePercent / 100 },
-          cooldown: { base: unit.maxCooldown, multiplier: 1 + stats.attackSpeed / 100 }
-        };
-        callbacks.onInspect?.({ type: 'UNIT', data: unit, statsBreakdown: breakdown });
+        callbacks.onInspect?.({ type: 'UNIT', data: unit, statsBreakdown: this.getUnitBreakdown(unit, store.stats) });
       } else {
         this.selectedEntityId = null;
         callbacks.onInspect?.(null);
@@ -91,12 +84,7 @@ export class InspectionSystem implements System {
     if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
       const unit = gridUnits.find((u: any) => u.row === r && u.col === c);
       if (unit) {
-        const typeBonus = this.getTypeBonus(unit.type, stats);
-        const breakdown: StatsBreakdown = {
-          damage: { base: unit.damage, bonus: typeBonus, multiplier: 1 + stats.damagePercent / 100 },
-          cooldown: { base: unit.maxCooldown, multiplier: 1 + stats.attackSpeed / 100 }
-        };
-        return { type: 'UNIT', data: unit, statsBreakdown: breakdown };
+        return { type: 'UNIT', data: unit, statsBreakdown: this.getUnitBreakdown(unit, stats) };
       }
     }
 
@@ -115,12 +103,47 @@ export class InspectionSystem implements System {
     return null;
   }
   
+  private getUnitBreakdown(unit: Unit, stats: PlayerStats): StatsBreakdown {
+      const typeBonus = this.getTypeBonus(unit.type, stats);
+    
+      const globalDmgPct = stats.damagePercent || 0;
+      const tempDmgPct = stats.tempDamageMult || 0;
+      const heroDmgPct = unit.isHero ? (stats.heroDamageMult || 0) : 0;
+      const totalDmgMultiplier = (1 + globalDmgPct) * (1 + tempDmgPct) * (1 + heroDmgPct);
+      
+      const globalAspdPct = stats.attackSpeed || 0;
+      const tempAspdPct = stats.tempAttackSpeedMult || 0;
+      const heroAspdPct = unit.isHero ? (stats.heroAttackSpeedMult || 0) : 0;
+      const totalCdMultiplier = (1 + globalAspdPct) * (1 + tempAspdPct) * (1 + heroAspdPct);
+
+      return {
+          damage: { 
+              base: unit.damage, 
+              bonus: typeBonus, 
+              multiplier: totalDmgMultiplier,
+              breakdown: {
+                  globalPct: globalDmgPct,
+                  tempPct: tempDmgPct,
+                  heroPct: heroDmgPct,
+              }
+          },
+          cooldown: { 
+              base: unit.maxCooldown, 
+              multiplier: totalCdMultiplier,
+              breakdown: {
+                  globalPct: globalAspdPct,
+                  tempPct: tempAspdPct,
+                  heroPct: heroAspdPct,
+              }
+          }
+      };
+  }
+
   private getTypeBonus(type: any, stats: any) {
      switch(type) {
          case 'MELEE': return stats.meleeDmg;
          case 'RANGED': return stats.rangedDmg;
          case 'MAGIC': return stats.elementalDmg;
-         case 'ENGINEERING': return stats.engineering;
          default: return 0;
      }
   }

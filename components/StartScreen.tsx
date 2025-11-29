@@ -8,47 +8,46 @@ interface StartScreenProps {
 
 export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
   return (
-    <div className="absolute inset-0 bg-slate-950 z-[100] flex flex-col items-center justify-center overflow-hidden">
+    <div className="absolute inset-0 bg-sky-200/95 z-[100] flex flex-col items-center justify-center overflow-hidden">
       {/* Background Decor */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none">
-         <div className="absolute top-10 left-10 text-9xl animate-spin-slow">⚙️</div>
-         <div className="absolute bottom-10 right-10 text-9xl animate-bounce">👾</div>
-         <div className="absolute top-1/2 left-1/4 text-8xl opacity-50">🛡️</div>
+      <div className="absolute inset-0 opacity-10 pointer-events-none">
+         <div className="absolute top-10 left-10 text-9xl animate-spin-slow text-blue-500">⚙️</div>
+         <div className="absolute bottom-10 right-10 text-9xl animate-bounce text-yellow-500">👾</div>
+         <div className="absolute top-1/2 left-1/4 text-8xl opacity-30 text-green-500">🛡️</div>
       </div>
 
       <div className="relative z-10 text-center flex flex-col items-center">
-        <div className="mb-2 flex items-center gap-3 animate-in slide-in-from-top duration-700">
-            <span className="p-3 bg-blue-600/20 rounded-xl border border-blue-500/50 text-blue-400">
-                <Keyboard size={32} />
+        <div className="mb-4 flex items-center gap-3 animate-in slide-in-from-top duration-700">
+            <span className="p-4 bg-white rounded-2xl shadow-lg border-2 border-blue-200 text-blue-500">
+                <Keyboard size={40} />
             </span>
-            <span className="p-3 bg-red-600/20 rounded-xl border border-red-500/50 text-red-400">
-                <Zap size={32} />
+            <span className="p-4 bg-white rounded-2xl shadow-lg border-2 border-red-200 text-red-500">
+                <Zap size={40} />
             </span>
         </div>
 
-        <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 mb-2 tracking-tight filter drop-shadow-[0_0_20px_rgba(6,182,212,0.5)]">
-          键盘侠<br/>大战水军
+        <h1 className="text-7xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-500 to-purple-600 mb-2 tracking-tight drop-shadow-sm text-stroke">
+          动物键盘侠
         </h1>
         
-        <h2 className="text-3xl md:text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-8 tracking-widest uppercase">
+        <h2 className="text-3xl md:text-5xl font-black text-slate-700 mb-8 tracking-widest uppercase">
            GRID TACTICS
         </h2>
 
-        <div className="inline-block bg-slate-900/80 backdrop-blur border border-white/10 px-4 py-1 rounded-full text-xs font-mono text-gray-400 mb-12">
-            PvZ 改编版 v3.0
+        <div className="inline-block bg-white/80 backdrop-blur px-6 py-2 rounded-full text-sm font-bold text-slate-500 mb-12 shadow-sm border border-white">
+            PvZ 改编版 v3.0 • 卡通版
         </div>
 
         <button 
           onClick={onStart}
-          className="group relative px-12 py-5 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-2xl font-black text-xl md:text-2xl text-white shadow-[0_0_40px_rgba(234,179,8,0.4)] hover:shadow-[0_0_60px_rgba(234,179,8,0.6)] hover:scale-105 transition-all duration-300"
+          className="group relative px-12 py-6 bg-gradient-to-b from-yellow-400 to-orange-500 rounded-3xl font-black text-2xl md:text-3xl text-white shadow-[0_8px_0_rgb(217,119,6)] hover:shadow-[0_4px_0_rgb(217,119,6)] hover:translate-y-1 active:shadow-none active:translate-y-2 transition-all"
         >
-          <span className="flex items-center gap-3">
-             开始防御 <MousePointer2 className="group-hover:translate-x-1 transition-transform" />
+          <span className="flex items-center gap-3 drop-shadow-md">
+             开始防御 <MousePointer2 className="group-hover:translate-x-1 transition-transform" strokeWidth={3} />
           </span>
-          <div className="absolute inset-0 rounded-2xl ring-2 ring-white/50 group-hover:ring-offset-2 transition-all"></div>
         </button>
 
-        <p className="mt-8 text-gray-500 font-mono text-xs uppercase tracking-widest">
+        <p className="mt-12 text-slate-500 font-bold text-sm uppercase tracking-widest">
            招募单位 • 坚守阵地 • 保护核心
         </p>
       </div>

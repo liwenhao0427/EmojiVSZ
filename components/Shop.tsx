@@ -2,24 +2,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ShopItem, BrotatoItem, UnitData } from '../types';
-import { RARITY_COLORS, TIER_TO_RARITY, PRICE_MULTIPLIER } from '../constants';
-import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown, Package, Sword } from 'lucide-react';
+import { RARITY_COLORS, TIER_TO_RARITY, PRICE_MULTIPLIER, CELL_SIZE } from '../constants';
+import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown, Package, Sword, TrendingUp } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
 import { rollShopItems } from '../services/itemGenerator';
 import { UNIT_DATA } from '../data/units';
 import { InventoryPanel } from './InventoryPanel';
 
 interface ShopProps {
-  onBuyItem: (item: BrotatoItem) => void;
-  onNextWave: () => void;
   isVisible: boolean;
   onVisibilityChange: (visible: boolean) => void;
 }
 
 const UNIT_ID_POOL = Object.keys(UNIT_DATA);
 
-export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave, isVisible, onVisibilityChange }) => {
-  const { stats, addUnit, ownedItems } = useGameStore();
+export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => {
+  const { stats, addUnit, ownedItems, buyBrotatoItem, buyExperience } = useGameStore();
   const [items, setItems] = useState<ShopItem[]>([]);
   const [rerollCount, setRerollCount] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -57,10 +55,8 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave, isVisible, on
       });
     }
 
-    // Unit Chance Calculation: Base 40% + Luck%
     const unitChance = 0.40 + (stats.luck * 0.01);
 
-    // Try to replace items with units based on chance
     newItems.forEach((item, idx) => {
         if (!item.locked && !item.bought && item.type === 'ITEM') {
             if (Math.random() < unitChance) {
@@ -101,7 +97,7 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave, isVisible, on
                  setTimeout(() => setFeedback(null), 2000);
                  return;
             }
-            onBuyItem({ ...itemData, price: shopItem.price }); // Pass the adjusted price
+            buyBrotatoItem({ ...itemData, price: shopItem.price }); 
             shopItem.bought = true;
         } else {
              const placed = addUnit(shopItem.data as UnitData);
@@ -132,52 +128,95 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave, isVisible, on
       setItems(prev => prev.map(i => i.id === id ? { ...i, locked: !i.locked } : i));
   };
   
+  const handleBuyXP = () => {
+      const xpCost = 10;
+      const xpGain = 10;
+      if (stats.gold >= xpCost) {
+          buyExperience(xpGain, xpCost);
+      }
+  };
+  
   const currentWave = stats.wave;
+  const xpPct = (stats.xp / stats.maxXp) * 100;
+
+  // Helper to calculate preview damage for shop unit
+  const getUnitPreview = (unit: UnitData) => {
+      let flatBonus = 0;
+      if (unit.type === 'MELEE') flatBonus = stats.meleeDmg;
+      if (unit.type === 'RANGED') flatBonus = stats.rangedDmg;
+      if (unit.type === 'MAGIC') flatBonus = stats.elementalDmg;
+      
+      const globalDmgMult = (1 + (stats.damagePercent || 0));
+      const damage = Math.round((unit.damage + flatBonus) * globalDmgMult);
+      
+      // Cooldown
+      const attackSpeed = (1 + (stats.attackSpeed || 0));
+      const cooldown = (unit.cd / Math.max(0.1, attackSpeed)).toFixed(2);
+      
+      const rangeCells = Math.round(unit.range / CELL_SIZE);
+      
+      return { damage, cooldown, rangeCells };
+  };
 
   if (!isVisible) {
-      return (
-        <div className="absolute bottom-8 right-8 z-50 pointer-events-auto">
-            <button 
-                onClick={() => onVisibilityChange(true)}
-                className="flex items-center gap-3 px-6 py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(234,179,8,0.5)] transition-all animate-bounce"
-            >
-                <ShoppingBag size={24} />
-                打开商店 ({stats.gold} G)
-            </button>
-        </div>
-      );
+      // The "Open Shop" button is now handled in App.tsx
+      return null;
   }
 
   return (
-    <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-sm flex flex-col p-8 z-40 text-white animate-in slide-in-from-bottom duration-300 pointer-events-auto">
+    <div className="absolute inset-0 bg-slate-50/95 backdrop-blur-md flex flex-col p-8 z-[60] text-slate-800 animate-in slide-in-from-bottom duration-300 pointer-events-auto">
         
-        {/* Integrated Inventory Panel */}
+        {/* Integrated Inventory Panel - Now sits on top of this layer */}
         <InventoryPanel />
         
-        <div className="flex justify-between items-start mb-4">
-            <div>
-                <h2 className="text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-                    黑市
-                </h2>
-                <p className="text-gray-400 font-mono">第 {currentWave} 波准备阶段</p>
-                {feedback && <p className="text-red-500 font-bold mt-2 animate-pulse">{feedback}</p>}
+        <div className="flex justify-between items-start mb-4 shrink-0">
+            <div className="flex flex-col gap-2">
+                <div>
+                    <h2 className="text-4xl font-black text-slate-800 tracking-tight">
+                        黑市 <span className="text-yellow-500">Shop</span>
+                    </h2>
+                    <p className="text-slate-400 font-bold">第 {currentWave} 波准备阶段</p>
+                </div>
+                
+                {/* Shop Experience Bar */}
+                <div className="w-64">
+                    <div className="flex justify-between text-[10px] text-slate-500 font-bold mb-1">
+                        <span>HERO LEVEL {stats.heroLevel}</span>
+                        <span>{Math.floor(stats.xp)}/{Math.floor(stats.maxXp)}</span>
+                    </div>
+                    <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden border border-slate-100">
+                        <div className="h-full bg-purple-500 transition-all duration-300 rounded-full" style={{ width: `${Math.max(0, xpPct)}%` }}></div>
+                    </div>
+                </div>
+
+                {feedback && <p className="text-red-500 font-bold mt-1 animate-pulse bg-red-100 px-3 py-1 rounded-full inline-block text-xs">{feedback}</p>}
             </div>
             
             <div className="flex items-center gap-4">
-                 <div className="flex items-center gap-4 bg-slate-900 p-3 rounded-xl border border-yellow-500/30">
-                    <Coins className="text-yellow-400" />
-                    <span className="text-3xl font-mono text-yellow-300">{stats.gold}</span>
+                 {/* Buy XP Button */}
+                 <button 
+                    onClick={handleBuyXP}
+                    className="group flex items-center gap-3 px-5 py-3 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-2xl border-2 border-purple-200 transition-all hover:-translate-y-1 active:translate-y-0"
+                    disabled={stats.gold < 10}
+                 >
+                     <div className="bg-purple-200 group-hover:bg-white p-1.5 rounded-lg transition-colors">
+                        <TrendingUp size={20} />
+                     </div>
+                     <div className="flex flex-col items-start leading-none">
+                         <span className="text-[10px] font-black uppercase tracking-wider opacity-70">购买经验</span>
+                         <span className="text-sm font-black">+10 XP <span className="opacity-60 text-xs">(-10G)</span></span>
+                     </div>
+                 </button>
+
+                 <div className="flex items-center gap-3 bg-white p-3 px-5 rounded-2xl border-2 border-slate-100 shadow-sm min-w-[140px] justify-center">
+                    <Coins className="text-yellow-500" size={28} />
+                    <span className="text-3xl font-black text-slate-700">{stats.gold}</span>
                 </div>
-                <button 
-                    onClick={() => onVisibilityChange(false)}
-                    className="p-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-gray-300 hover:text-white transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
-                >
-                    <ChevronDown size={20} /> 隐藏
-                </button>
             </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-6 flex-1 mb-6 items-start">
+        {/* Cards Grid - Reduced height by using aspect ratio or limiting flex basis */}
+        <div className="grid grid-cols-4 gap-4 mb-4 items-start h-[380px]">
             {items.map(shopItem => {
                 const isUnit = shopItem.type === 'UNIT';
                 const data = shopItem.data as BrotatoItem | UnitData;
@@ -190,37 +229,62 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave, isVisible, on
                     <div 
                         key={shopItem.id}
                         className={`
-                            relative bg-slate-900 border-2 rounded-xl p-2 flex flex-col justify-between transition-all group
-                            ${shopItem.bought ? 'opacity-50 grayscale' : 'hover:scale-105 hover:border-white'}
+                            relative bg-white border-4 rounded-3xl p-3 flex flex-col justify-between transition-all group shadow-sm hover:shadow-xl h-full
+                            ${shopItem.bought ? 'opacity-50 grayscale bg-slate-100' : 'hover:-translate-y-2'}
                         `}
-                        style={{ borderColor: color }}
+                        style={{ borderColor: shopItem.locked ? '#facc15' : 'white' }}
                     >
-                        <div className="flex justify-between items-start">
-                           <div className="flex items-center gap-2 text-xs font-bold px-2 py-1 rounded bg-black/50" style={{ color }}>
+                        {/* Header */}
+                        <div className="flex justify-between items-start mb-1">
+                           <div className="flex items-center gap-1.5 text-[10px] font-black px-2 py-1 rounded-full bg-slate-100 text-slate-500 uppercase tracking-wider">
                              {isUnit ? <Sword size={12}/> : <Package size={12}/>}
                              {isUnit ? (data as UnitData).type : rarity}
                            </div>
 
-                            <button onClick={() => toggleLock(shopItem.id)} className={`p-1 rounded ${shopItem.locked ? 'text-yellow-400' : 'text-gray-600 hover:text-white'}`}>
+                            <button onClick={() => toggleLock(shopItem.id)} className={`p-1.5 rounded-full transition-colors ${shopItem.locked ? 'bg-yellow-100 text-yellow-600' : 'text-slate-300 hover:bg-slate-100'}`}>
                                 <Lock size={16} />
                             </button>
                         </div>
 
-                        <div className="flex flex-col items-center text-center my-1">
-                            <div className="text-4xl mb-1 transform transition-transform group-hover:scale-110">
+                        {/* Content */}
+                        <div className="flex flex-col items-center text-center my-1 flex-1 overflow-hidden">
+                            <div className="text-4xl mb-2 transform transition-transform group-hover:scale-110 drop-shadow-sm filter">
                                 {isUnit ? (data as UnitData).emoji : (data as BrotatoItem).name.charAt(0)}
                             </div>
-                            <h3 className="text-base font-bold mb-1">
+                            <h3 className="text-base font-black text-slate-800 mb-1 leading-tight line-clamp-1">
                                 {data.name}
                             </h3>
                             
-                            <div className="bg-black/30 p-2 rounded w-full text-xs text-gray-300 flex flex-col justify-center">
-                                <p className="min-h-[2.5rem]">{isUnit ? (data as UnitData).desc : (data as BrotatoItem).desc}</p>
+                            {/* Unit Stats or Item Desc */}
+                            <div className="flex-1 w-full flex flex-col justify-center">
+                                {isUnit ? (
+                                    (() => {
+                                        const preview = getUnitPreview(data as UnitData);
+                                        return (
+                                            <div className="grid grid-cols-2 gap-1 w-full bg-slate-50 p-2 rounded-xl text-[10px] font-bold text-slate-600">
+                                                <div className="flex items-center gap-1"><span className="text-red-500">⚔️</span> {preview.damage}</div>
+                                                <div className="flex items-center gap-1"><span className="text-green-500">❤️</span> {(data as UnitData).maxHp}</div>
+                                                <div className="flex items-center gap-1"><span className="text-yellow-500">⚡</span> {preview.cooldown}s</div>
+                                                <div className="flex items-center gap-1"><span className="text-blue-500">🎯</span> {preview.rangeCells}</div>
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    <div className="bg-slate-50 p-2 rounded-xl w-full text-[10px] font-bold text-slate-500 flex flex-col justify-center h-16 overflow-y-auto custom-scrollbar leading-tight">
+                                        <p>{(data as BrotatoItem).desc}</p>
+                                    </div>
+                                )}
                             </div>
+                            
+                            {isUnit && (
+                                <div className="text-[10px] text-slate-400 font-bold mt-1 line-clamp-1">
+                                    {(data as UnitData).desc}
+                                </div>
+                            )}
                         </div>
                         
                         {!isUnit && maxCount && (
-                             <div className="text-center text-[10px] text-yellow-400 font-mono mb-1">
+                             <div className="text-center text-[10px] text-slate-400 font-bold mb-1">
                                 已拥有: {ownedCount} / {maxCount}
                             </div>
                         )}
@@ -229,8 +293,12 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave, isVisible, on
                             onClick={() => handleBuy(shopItem)}
                             disabled={shopItem.bought || stats.gold < shopItem.price}
                             className={`
-                                w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 text-sm mt-1
-                                ${shopItem.bought ? 'bg-gray-800 text-gray-500' : stats.gold >= shopItem.price ? 'bg-green-600 hover:bg-green-500' : 'bg-red-900/50 text-red-300'}
+                                w-full py-2.5 rounded-xl font-black flex items-center justify-center gap-2 text-xs mt-auto shadow-sm
+                                ${shopItem.bought 
+                                    ? 'bg-slate-200 text-slate-400' 
+                                    : stats.gold >= shopItem.price 
+                                        ? 'bg-green-500 hover:bg-green-400 text-white shadow-green-200' 
+                                        : 'bg-red-100 text-red-400 cursor-not-allowed'}
                             `}
                         >
                             {shopItem.bought ? '已售' : <><Coins size={14}/> {shopItem.price}</>}
@@ -240,21 +308,25 @@ export const Shop: React.FC<ShopProps> = ({ onBuyItem, onNextWave, isVisible, on
             })}
         </div>
 
-        <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-white/5">
-            <div />
-            <div className="flex items-center gap-4">
+        {/* Footer Actions - Right Aligned to avoid Backpack */}
+        <div className="mt-auto flex justify-end items-center gap-4">
+            <div className="text-xs font-bold text-slate-400 px-2 text-right">
+                提示: 右键点击单位可出售
+            </div>
+            
+            <div className="flex items-center gap-4 bg-white p-2 rounded-3xl border border-slate-200 shadow-sm pl-4">
                 <button 
                     onClick={handleReroll}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-colors disabled:bg-slate-700 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-black transition-colors disabled:bg-slate-200 disabled:text-slate-400 shadow-lg shadow-blue-200"
                     disabled={stats.gold < rerollCost}
                 >
                     <RefreshCw size={20} /> {rerollCost === 0 ? '刷新 (免费)' : `刷新 (-${rerollCost})`}
                 </button>
                 <button 
-                    onClick={onNextWave}
-                    className="px-12 py-4 bg-red-600 hover:bg-red-500 rounded-lg text-2xl font-black italic tracking-wider shadow-[0_0_20px_rgba(220,38,38,0.5)] animate-pulse hover:animate-none hover:scale-105 transition-all"
+                    onClick={() => onVisibilityChange(false)}
+                    className="px-10 py-3 bg-red-500 hover:bg-red-400 text-white rounded-xl text-xl font-black tracking-wider shadow-lg shadow-red-200 hover:scale-105 transition-all"
                 >
-                    开始第 {currentWave + 1} 波
+                    返回战场
                 </button>
             </div>
         </div>

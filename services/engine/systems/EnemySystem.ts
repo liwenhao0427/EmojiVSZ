@@ -1,5 +1,4 @@
 
-
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -197,6 +196,25 @@ export class EnemySystem implements System {
         return;
       }
 
+      // Handle Burn Effect
+      if (e.burnTimer && e.burnTimer > 0) {
+          e.burnTimer -= dt;
+          e.burnTickTimer = (e.burnTickTimer || 0) - dt;
+          if (e.burnTickTimer <= 0) {
+              if (e.burnDamage && e.burnDamage > 0) {
+                  e.hp -= e.burnDamage;
+                  callbacks.onAddFloatingText?.(gameState, `-${Math.round(e.burnDamage)}`, 'orange', e.x, e.y - e.radius);
+                  if (e.hp <= 0 && (!e.deathTimer || e.deathTimer <= 0)) {
+                      this.killEnemy(e, gameState, callbacks);
+                  }
+              }
+              e.burnTickTimer = 1.0; // Tick every 1 second
+          }
+          if (e.burnTimer <= 0) {
+              e.burnDamage = 0; // Clear damage when timer expires
+          }
+      }
+
       let currentSpeed = e.speed;
       if (e.slowTimer && e.slowTimer > 0) {
           e.slowTimer -= dt;
@@ -238,5 +256,16 @@ export class EnemySystem implements System {
     });
     
     gameState.enemies = gameState.enemies.filter(e => !e.markedForDeletion);
+  }
+
+  private killEnemy(e: any, gameState: GameState, callbacks: EngineCallbacks) {
+    if (e.markedForDeletion || (e.deathTimer && e.deathTimer > 0)) return;
+    
+    e.deathTimer = 1.0; 
+    
+    const xp = e.type === 'BOSS' ? 15 : e.type === 'ELITE' ? 7 : 3;
+    const gold = e.type === 'BOSS' ? 20 : e.type === 'ELITE' ? 10 : 5;
+    
+    callbacks.onGainLoot?.(xp, gold);
   }
 }

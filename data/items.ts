@@ -3,14 +3,6 @@ import { BrotatoItem } from "../types";
 
 export const ITEMS_DATA: BrotatoItem[] = [
   {
-    "id": "book",
-    "name": "书",
-    "tier": 1,
-    "price": 8,
-    "stats": { "engineering": 1 },
-    "desc": "+1 工程学"
-  },
-  {
     "id": "boxing_glove",
     "name": "拳击手套",
     "tier": 1,
@@ -135,14 +127,6 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "desc": "+1 远程伤害, +1 元素伤害"
   },
   {
-    "id": "pencil",
-    "name": "铅笔",
-    "tier": 1,
-    "price": 15,
-    "stats": { "engineering": 2, "atkSpeed": -0.01, "crit": -0.01 },
-    "desc": "+2 工程学, -1% 攻速/暴击"
-  },
-  {
     "id": "propeller_hat",
     "name": "螺旋桨帽",
     "tier": 1,
@@ -226,22 +210,6 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "desc": "+5% 暴击"
   },
   {
-    "id": "cog",
-    "name": "齿轮",
-    "tier": 2,
-    "price": 35,
-    "stats": { "engineering": 4, "percentDmg": -0.04 },
-    "desc": "+4 工程学, -4% 伤害"
-  },
-  {
-    "id": "compass",
-    "name": "指南针",
-    "tier": 2,
-    "price": 40,
-    "stats": { "engineering": 3, "crit": -0.03 },
-    "desc": "+3 工程学, -3% 暴击"
-  },
-  {
     "id": "cyclops_worm",
     "name": "独眼蠕虫",
     "tier": 2,
@@ -307,15 +275,6 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "desc": "+3% 伤害, -4% 暴击"
   },
   {
-    "id": "metal_detector",
-    "name": "金属探测器",
-    "tier": 2,
-    "price": 40,
-    "stats": { "luck": 6, "engineering": 2, "percentDmg": -0.05 },
-    "effect": { "double_material_chance": 5 },
-    "desc": "材料翻倍概率 +5%, +6 幸运"
-  },
-  {
     "id": "metal_plate",
     "name": "金属板",
     "tier": 2,
@@ -347,14 +306,6 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "stats": { "percentDmg": -0.02 },
     "effect": { "pierce_damage": 15 },
     "desc": "贯穿伤害 +15%, -2% 伤害"
-  },
-  {
-    "id": "ritual",
-    "name": "仪式",
-    "tier": 2,
-    "price": 60,
-    "stats": { "percentDmg": 0.06, "engineering": -2 },
-    "desc": "+6% 伤害, -2 工程"
   },
   {
     "id": "scope",
@@ -412,14 +363,6 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "stats": { "harvesting": 5 },
     "effect": { "enemy_count": -5 },
     "desc": "+5 收获, 敌人数量 -5%"
-  },
-  {
-    "id": "alloy",
-    "name": "合金",
-    "tier": 3,
-    "price": 80,
-    "stats": { "meleeDmg": 3, "rangedDmg": 3, "engineering": 3, "crit": 0.05 },
-    "desc": "全伤害属性提升 +3, +5% 暴击"
   },
   {
     "id": "baby_with_a_beard",
@@ -581,23 +524,6 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "desc": "静止时伤害 +25%"
   },
   {
-    "id": "strange_book",
-    "name": "奇怪的书",
-    "tier": 3,
-    "price": 70,
-    "stats": { "meleeDmg": -1, "rangedDmg": -1 },
-    "effect": { "ele_to_eng": 1 },
-    "desc": "每 1 点元素伤害增加 1 点工程学"
-  },
-  {
-    "id": "toolbox",
-    "name": "工具箱",
-    "tier": 3,
-    "price": 55,
-    "stats": { "engineering": 6, "atkSpeed": -0.08 },
-    "desc": "+6 工程学, -8% 攻速"
-  },
-  {
     "id": "tractor",
     "name": "拖拉机",
     "tier": 3,
@@ -645,14 +571,6 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "price": 105,
     "stats": { "meleeDmg": 10, "rangedDmg": 5 },
     "desc": "+10 近战, +5 远程"
-  },
-  {
-    "id": "diploma",
-    "name": "文凭",
-    "tier": 4,
-    "price": 80,
-    "stats": { "engineering": 10, "xpGain": 0.10 },
-    "desc": "+10 工程学, +10% 经验"
   },
   {
     "id": "explosive_shells",
@@ -719,21 +637,5 @@ export const ITEMS_DATA: BrotatoItem[] = [
     "stats": { "percentDmg": -0.35 },
     "effect": { "bounce_plus_1": 1 },
     "desc": "子弹弹射 +1, -35% 伤害"
-  },
-  {
-    "id": "robot_arm",
-    "name": "机械臂",
-    "tier": 4,
-    "price": 90,
-    "stats": { "engineering": 6 },
-    "desc": "+6 工程"
-  },
-  {
-    "id": "wolf_helmet",
-    "name": "狼头盔",
-    "tier": 4,
-    "price": 80,
-    "stats": { "elementalDmg": 8, "luck": 15, "engineering": -5 },
-    "desc": "+8 元素, +15 幸运, -5 工程"
   }
 ];

@@ -1,5 +1,10 @@
 
 
+
+
+
+
+// FIX: Add 'ENGINEERING' to WeaponClass to support engineering units and fix type errors.
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
 export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
@@ -64,6 +69,9 @@ export interface HeroUpgradeStatus {
     multishot: number; // 0 -> 1(Double) -> 2(Tri) -> 3(Penta)
     effect: number;    // 0 -> 1(Tracking) -> 2(Burn) -> 3(Explode) -> 4(Chain)
     bounce: number;    // 0 -> 1(1) -> 2(2) -> 3(4) -> 4(10)
+    damage: number;    // Level of pure damage upgrade
+    attackSpeed: number; // Level of pure attack speed upgrade
+    ultimate: number;  // Level of ultimate upgrade
 }
 
 export interface PlayerStats {
@@ -94,13 +102,14 @@ export interface PlayerStats {
   meleeDmg: number;
   rangedDmg: number;
   elementalDmg: number;
-  engineering: number;
 
   // Temporary Wave Buffs (Reset every wave)
   tempDamageMult: number;
   tempAttackSpeedMult: number;
-  heroTempDamageMult?: number;
-  heroTempAttackSpeedMult?: number;
+  
+  // Hero-specific multipliers (also reset/recalculated each wave)
+  heroDamageMult?: number;
+  heroAttackSpeedMult?: number;
   
   // Meta
   wave: number;
@@ -136,7 +145,7 @@ export interface DraftOption {
       heroAttackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT' | 'DOUBLE_SHOT';
       heroEnergyGainRate?: number; // As a multiplier, e.g. 0.5 for +50%
       heroMaxEnergy?: number; // As a reduction, e.g., -20
-      upgradePath?: 'multishot' | 'effect' | 'bounce' | 'ultimate';
+      upgradePath?: 'multishot' | 'effect' | 'bounce' | 'ultimate' | 'damage' | 'attackSpeed';
       upgradeLevel?: number;
       extraEffects?: Record<string, any>;
   };
@@ -180,6 +189,10 @@ export interface Enemy extends Entity {
   deathTimer?: number;
   // Knockback
   knockbackVx?: number;
+  // For burn effect
+  burnTimer?: number;
+  burnDamage?: number;
+  burnTickTimer?: number;
 }
 
 export interface Projectile extends Entity {
@@ -278,8 +291,25 @@ export interface ShopItem {
 
 // Union type for inspection
 export type StatsBreakdown = {
-    damage: { base: number; bonus: number; multiplier: number };
-    cooldown: { base: number; multiplier: number };
+    damage: { 
+        base: number; 
+        bonus: number; 
+        multiplier: number; // This will be the final combined multiplier
+        breakdown?: { // Optional detailed breakdown
+            globalPct: number;
+            heroPct: number;
+            tempPct: number;
+        }
+    };
+    cooldown: { 
+        base: number; 
+        multiplier: number; // Final combined
+        breakdown?: {
+            globalPct: number;
+            heroPct: number;
+            tempPct: number;
+        }
+    };
 };
 
 export type InspectableEntity = {

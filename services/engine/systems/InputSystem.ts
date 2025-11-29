@@ -1,21 +1,23 @@
 
-
 import { useGameStore } from '../../../store/useGameStore';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../../../constants';
 import { InspectionSystem } from './InspectionSystem';
+import { GameEngine } from '../index';
 
 export class InputSystem {
   public mouseX: number = 0;
   public mouseY: number = 0;
   public dragUnitId: string | null = null;
   private dragStartGrid: { r: number, c: number } | null = null;
+  private dragStartCoords: { x: number, y: number } | null = null;
   private inspectionSystem!: InspectionSystem;
   
-  constructor(private canvas: HTMLCanvasElement) {
+  constructor(private canvas: HTMLCanvasElement, private engine: GameEngine) {
     this.canvas.addEventListener('mousedown', this.handleMouseDown);
     this.canvas.addEventListener('mousemove', this.handleMouseMove);
     this.canvas.addEventListener('mouseup', this.handleMouseUp);
     this.canvas.addEventListener('mouseleave', this.handleMouseUp);
+    this.canvas.addEventListener('contextmenu', e => e.preventDefault());
   }
 
   public setInspectionSystem(inspectionSystem: InspectionSystem) {
@@ -27,12 +29,21 @@ export class InputSystem {
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
     this.canvas.removeEventListener('mouseup', this.handleMouseUp);
     this.canvas.removeEventListener('mouseleave', this.handleMouseUp);
+    this.canvas.removeEventListener('contextmenu', e => e.preventDefault());
   }
 
   private handleMouseDown = (e: MouseEvent) => {
     this.updateMouseCoords(e);
-    this.inspectionSystem.handleMouseClick(this.mouseX, this.mouseY);
     
+    if (e.button === 2) { // Right click
+      e.preventDefault();
+      this.engine.handleRightClick(this.mouseX, this.mouseY);
+      return;
+    }
+
+    this.dragStartCoords = { x: this.mouseX, y: this.mouseY };
+    
+    // Check for potential drag target, but don't commit to action yet
     const { c, r } = this.getGridPosFromCoords(this.mouseX, this.mouseY);
     if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
       const store = useGameStore.getState();
@@ -50,23 +61,46 @@ export class InputSystem {
 
   private handleMouseMove = (e: MouseEvent) => {
     this.updateMouseCoords(e);
-    if (this.dragUnitId) {
-      this.canvas.style.cursor = 'grabbing';
+    if (this.dragUnitId && this.dragStartCoords) {
+        // Calculate distance moved
+        const dist = Math.hypot(this.mouseX - this.dragStartCoords.x, this.mouseY - this.dragStartCoords.y);
+        // Only show grabbing cursor if we've actually started dragging (moved > 5px)
+        if (dist > 5) {
+            this.canvas.style.cursor = 'grabbing';
+        } else {
+            this.canvas.style.cursor = 'default';
+        }
     } else {
       this.canvas.style.cursor = 'default';
     }
   };
 
   private handleMouseUp = (e: MouseEvent) => {
-    if (this.dragUnitId && this.dragStartGrid) {
-      const { c, r } = this.getGridPosFromCoords(this.mouseX, this.mouseY);
-      
-      if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
-        useGameStore.getState().moveUnit(this.dragUnitId, r, c);
-      }
+    if (this.dragStartCoords) {
+        const dist = Math.hypot(this.mouseX - this.dragStartCoords.x, this.mouseY - this.dragStartCoords.y);
+        
+        // If movement is very small, treat as CLICK
+        if (dist < 5) {
+            this.inspectionSystem.handleMouseClick(this.mouseX, this.mouseY);
+            // Cancel any drag
+            this.dragUnitId = null;
+            this.dragStartGrid = null;
+        } 
+        // If movement is large and we have a unit, treat as DRAG DROP
+        else if (this.dragUnitId && this.dragStartGrid) {
+            const { c, r } = this.getGridPosFromCoords(this.mouseX, this.mouseY);
+            if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) {
+                useGameStore.getState().moveUnit(this.dragUnitId, r, c);
+            }
+            this.dragUnitId = null;
+            this.dragStartGrid = null;
+        }
     }
+    
+    // Cleanup
     this.dragUnitId = null;
     this.dragStartGrid = null;
+    this.dragStartCoords = null;
     this.canvas.style.cursor = 'default';
   };
 
