@@ -11,7 +11,8 @@ export interface Unit {
   type: WeaponClass;
   
   // Combat Stats
-  damage: number;
+  baseDamage: number;
+  scaling?: Record<string, number>;
   range: number; // In grid cells
   cooldown: number; // Seconds
   maxCooldown: number;
@@ -123,6 +124,12 @@ export interface PlayerStats {
   ult_speed_mult?: number;
   ult_dmg_bonus?: number;
   ult_kill_extend?: number;
+
+  // New Growth Rate Modifiers
+  meleeDmgGrowth?: number;
+  rangedDmgGrowth?: number;
+  elementalDmgGrowth?: number;
+  hpGrowth?: number;
   
   // Index signature for dynamic item effects
   [key: string]: number | undefined | any;
@@ -271,7 +278,8 @@ export interface UnitData {
   type: WeaponClass;
   attackPattern: 'SHOOT' | 'THRUST' | 'STREAM' | 'NONE';
   price: number;
-  damage: number;
+  baseDamage: number;
+  scaling: Record<string, number>;
   cd: number;
   range: number;
   maxHp: number;
@@ -300,10 +308,11 @@ export interface ShopItem {
 // Union type for inspection
 export type StatsBreakdown = {
     damage: { 
-        base: number; 
-        bonus: number; 
+        base: number;
+        scaled: Array<{ source: string; emoji: string; value: number; percentage: number }>;
+        bonus: number; // For other flat bonuses like stick
         multiplier: number; // This will be the final combined multiplier
-        breakdown?: { // Optional detailed breakdown
+        breakdown?: { // Optional detailed breakdown for multipliers
             globalPct: number;
             heroPct: number;
             tempPct: number;

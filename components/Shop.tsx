@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ShopItem, BrotatoItem, UnitData } from '../types';
@@ -120,21 +121,36 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
 
   // Helper to calculate preview damage for shop unit
   const getUnitPreview = (unit: UnitData) => {
-      let flatBonus = 0;
-      if (unit.type === 'MELEE') flatBonus = stats.meleeDmg;
-      if (unit.type === 'RANGED') flatBonus = stats.rangedDmg;
-      if (unit.type === 'MAGIC') flatBonus = stats.elementalDmg;
-      
-      const globalDmgMult = (1 + (stats.damagePercent || 0));
-      const damage = Math.round((unit.damage + flatBonus) * globalDmgMult);
-      
-      // Cooldown
-      const attackSpeed = (1 + (stats.attackSpeed || 0));
-      const cooldown = (unit.cd / Math.max(0.1, attackSpeed)).toFixed(2);
-      
-      const rangeCells = unit.range;
-      
-      return { damage, cooldown, rangeCells };
+    let scaledBonus = 0;
+    if (unit.scaling) {
+        if (unit.scaling.meleeDmg) scaledBonus += stats.meleeDmg * unit.scaling.meleeDmg;
+        if (unit.scaling.rangedDmg) scaledBonus += stats.rangedDmg * unit.scaling.rangedDmg;
+        if (unit.scaling.elementalDmg) scaledBonus += stats.elementalDmg * unit.scaling.elementalDmg;
+        if (unit.scaling.maxHp) scaledBonus += unit.maxHp * unit.scaling.maxHp;
+    }
+    
+    const globalDmgMult = (1 + (stats.damagePercent || 0));
+    const damage = Math.round((unit.baseDamage + scaledBonus) * globalDmgMult);
+    
+    // Cooldown
+    const attackSpeed = (1 + (stats.attackSpeed || 0));
+    const cooldown = (unit.cd / Math.max(0.1, attackSpeed)).toFixed(2);
+    
+    const rangeCells = unit.range;
+
+    // Formula String
+    const scalingParts: string[] = [];
+    const scalingEmojis: Record<string, string> = { meleeDmg: '🔪', rangedDmg: '🏹', elementalDmg: '🔮', maxHp: '❤️' };
+    if (unit.scaling) {
+        for (const key in unit.scaling) {
+            if (unit.scaling[key] > 0) {
+                scalingParts.push(`${Math.round(unit.scaling[key] * 100)}%${scalingEmojis[key] || ''}`);
+            }
+        }
+    }
+    const formulaString = `${unit.baseDamage}${scalingParts.length > 0 ? '+' : ''}${scalingParts.join('+')}`;
+    
+    return { damage, cooldown, rangeCells, formulaString };
   };
 
   if (!isVisible) {
@@ -273,11 +289,19 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
                                     (() => {
                                         const preview = getUnitPreview(data as UnitData);
                                         return (
-                                            <div className="grid grid-cols-2 gap-1 w-full bg-slate-50/80 p-2 rounded-xl text-[10px] font-bold text-slate-600">
-                                                <div className="flex items-center gap-1"><span className="text-red-500">⚔️</span> {preview.damage}</div>
-                                                <div className="flex items-center gap-1"><span className="text-green-500">❤️</span> {(data as UnitData).maxHp}</div>
-                                                <div className="flex items-center gap-1"><span className="text-yellow-500">⚡</span> {preview.cooldown}s</div>
-                                                <div className="flex items-center gap-1"><span className="text-blue-500">🎯</span> {preview.rangeCells}</div>
+                                            <div className="flex flex-col items-center gap-1 w-full bg-slate-50/80 p-2 rounded-xl text-[10px] font-bold text-slate-600">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-red-500">⚔️</span>
+                                                    <div className="flex items-baseline">
+                                                        <span>{preview.damage}</span>
+                                                        <span className="text-slate-400 text-[9px] ml-0.5 font-normal">({preview.formulaString})</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex w-full justify-around mt-1">
+                                                    <div className="flex items-center gap-1"><span className="text-green-500">❤️</span> {(data as UnitData).maxHp}</div>
+                                                    <div className="flex items-center gap-1"><span className="text-yellow-500">⚡</span> {preview.cooldown}s</div>
+                                                    <div className="flex items-center gap-1"><span className="text-blue-500">🎯</span> {preview.rangeCells}</div>
+                                                </div>
                                             </div>
                                         );
                                     })()

@@ -1,5 +1,6 @@
 
 
+
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem, HeroUpgradeStatus } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../constants';
@@ -144,7 +145,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 emoji: peashooterData.emoji,
                 description: peashooterData.desc,
                 type: peashooterData.type,
-                damage: peashooterData.damage,
+                baseDamage: peashooterData.baseDamage,
+                scaling: peashooterData.scaling,
                 range: peashooterData.range,
                 cooldown: 0,
                 maxCooldown: peashooterData.cd,
@@ -189,7 +191,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             name: data.name || 'Unit',
             emoji: data.emoji || '📦',
             type: data.type || 'RANGED',
-            damage: data.damage || 10,
+            baseDamage: data.baseDamage || 10,
+            scaling: data.scaling,
             range: data.range || 5,
             cooldown: 0,
             maxCooldown: 'cd' in data && typeof data.cd === 'number' ? data.cd : ((data as Partial<Unit>).maxCooldown || 1.0),

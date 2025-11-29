@@ -1,5 +1,6 @@
 
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/engine';
 import { LevelUpModal } from './components/LevelUpModal';
@@ -218,19 +219,19 @@ export default function App() {
         
         {phase === GamePhase.SHOP && !isShopVisible && (
             <div className="absolute bottom-8 right-8 z-[60] pointer-events-auto flex items-center gap-4">
+                 <button 
+                    onClick={startNextWave}
+                    className="flex items-center gap-3 px-8 py-4 bg-red-500 hover:bg-red-400 text-white font-black rounded-full shadow-lg hover:scale-105 transition-all"
+                >
+                    <Swords size={24} />
+                    {`开始第 ${stats.wave + 1} 波`}
+                </button>
                 <button 
                     onClick={() => setShopVisible(true)}
                     className="flex items-center gap-3 px-6 py-4 bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black rounded-full shadow-lg hover:scale-105 transition-all animate-bounce"
                 >
                     <ShoppingBag size={24} />
                     打开商店
-                </button>
-                <button 
-                    onClick={startNextWave}
-                    className="flex items-center gap-3 px-8 py-4 bg-red-500 hover:bg-red-400 text-white font-black rounded-full shadow-lg hover:scale-105 transition-all"
-                >
-                    <Swords size={24} />
-                    开始战斗
                 </button>
             </div>
         )}

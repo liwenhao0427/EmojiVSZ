@@ -1,7 +1,8 @@
 
+
 import React, { useState } from 'react';
 import { PlayerStats, GamePhase } from '../types';
-import { Zap, Shield, Swords, Crosshair, Wind, Clover, Menu, Magnet, GraduationCap, Coins } from 'lucide-react';
+import { Zap, Shield, Swords, Crosshair, Wind, Clover, Menu, Magnet, GraduationCap, Coins, Percent, Heart, Hammer, Leaf, Sparkles, Wand } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
 
 interface HUDProps {
@@ -11,23 +12,27 @@ interface HUDProps {
 }
 
 const STAT_DISPLAY_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; isPercent?: boolean, isFloat?: boolean }> = {
-    damagePercent: { label: '伤害加成', icon: Swords, color: 'text-red-500', isPercent: true },
-    attackSpeed: { label: '攻击速度', icon: Wind, color: 'text-yellow-500', isPercent: true },
-    critChance: { label: '暴击率', icon: Crosshair, color: 'text-orange-500', isPercent: true, isFloat: true },
-    luck: { label: '幸运', icon: Clover, color: 'text-green-500' },
-    xpGain: { label: '经验加成', icon: GraduationCap, color: 'text-purple-500', isPercent: true, isFloat: true },
-    meleeDmg: { label: '近战伤害', icon: Swords, color: 'text-red-600' },
-    rangedDmg: { label: '远程伤害', icon: Swords, color: 'text-blue-600' },
-    elementalDmg: { label: '元素伤害', icon: Swords, color: 'text-purple-600' },
-    enemy_count: { label: '敌人数量', icon: Zap, color: 'text-pink-500', isPercent: true },
-    explosion_dmg: { label: '爆炸伤害', icon: Zap, color: 'text-orange-600', isPercent: true},
-    burn_chance: { label: '燃烧几率', icon: Zap, color: 'text-red-600', isPercent: true},
+    damagePercent: { label: '伤害加成 ⚔️', icon: Percent, color: 'text-red-500', isPercent: true },
+    attackSpeed: { label: '攻击速度 💨', icon: Wind, color: 'text-yellow-500', isPercent: true },
+    critChance: { label: '暴击率 🎯', icon: Crosshair, color: 'text-orange-500', isPercent: true, isFloat: true },
+    luck: { label: '幸运 🍀', icon: Clover, color: 'text-green-500' },
+    xpGain: { label: '经验加成 🎓', icon: GraduationCap, color: 'text-purple-500', isPercent: true, isFloat: true },
+    flatHp: { label: '生命值 ❤️', icon: Heart, color: 'text-red-500' },
+    hpPercent: { label: '生命值 % ❤️', icon: Heart, color: 'text-red-500', isPercent: true },
+    harvesting: { label: '收获 🌿', icon: Leaf, color: 'text-lime-600' },
+    meleeDmg: { label: '近战伤害 🔪', icon: Swords, color: 'text-red-600' },
+    rangedDmg: { label: '远程伤害 🏹', icon: Swords, color: 'text-blue-600' },
+    elementalDmg: { label: '魔法伤害 🔮', icon: Sparkles, color: 'text-purple-600' },
+    engineering: { label: '工程学 🛠️', icon: Hammer, color: 'text-orange-700' },
+    enemy_count: { label: '敌人数量 👾', icon: Zap, color: 'text-pink-500', isPercent: true },
+    explosion_dmg: { label: '爆炸伤害 💥', icon: Zap, color: 'text-orange-600', isPercent: true},
+    burn_chance: { label: '燃烧几率 🔥', icon: Zap, color: 'text-red-600', isPercent: true},
 };
 
 
 const StatRow: React.FC<{ statKey: string; value: number }> = ({ statKey, value }) => {
     const config = STAT_DISPLAY_CONFIG[statKey];
-    if (!config) return null;
+    if (!config || value === 0) return null;
 
     let displayValue: string;
     if (config.isPercent) {

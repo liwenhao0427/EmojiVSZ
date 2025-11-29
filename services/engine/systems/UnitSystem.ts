@@ -69,7 +69,7 @@ export class UnitSystem implements System {
           return;
       }
       
-      if(u.damage === 0 || u.attackPattern === 'NONE') return;
+      if(u.baseDamage === 0 && !u.scaling?.maxHp || u.attackPattern === 'NONE') return;
 
       let cd = this.unitCooldowns.get(u.id) || 0;
       if (cd > 0) {
@@ -170,20 +170,25 @@ export class UnitSystem implements System {
   }
   
   private calculateFinalDamage(u: Unit, stats: PlayerStats): number {
+      let totalDamage = u.baseDamage;
+
+      // Add scaled damage from player stats
+      if (u.scaling) {
+          if (u.scaling.meleeDmg) totalDamage += (stats.meleeDmg || 0) * u.scaling.meleeDmg;
+          if (u.scaling.rangedDmg) totalDamage += (stats.rangedDmg || 0) * u.scaling.rangedDmg;
+          if (u.scaling.elementalDmg) totalDamage += (stats.elementalDmg || 0) * u.scaling.elementalDmg;
+          if (u.scaling.maxHp) totalDamage += u.maxHp * u.scaling.maxHp;
+      }
+      
+      // Apply multipliers
       let heroDmgMult = u.isHero ? (1 + (stats.heroDamageMult || 0)) : 1;
       if (u.isHero && u.isUlting) {
         heroDmgMult *= (1 + (stats.ult_dmg_bonus || 0));
       }
-
-      let flatBonus = 0;
-      if (u.type === 'MELEE') flatBonus = stats.meleeDmg;
-      if (u.type === 'RANGED') flatBonus = stats.rangedDmg;
-      if (u.type === 'MAGIC') flatBonus = stats.elementalDmg;
-      if (u.type === 'ENGINEERING') flatBonus = stats.engineering;
       
       const globalDmgMult = (1 + (stats.damagePercent || 0)) * (1 + (stats.tempDamageMult || 0));
 
-      return Math.round((u.damage + flatBonus) * globalDmgMult * heroDmgMult);
+      return Math.round(totalDamage * globalDmgMult * heroDmgMult);
   }
 
   private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks) {

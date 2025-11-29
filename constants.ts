@@ -50,6 +50,11 @@ export const INITIAL_STATS: PlayerStats = {
   heroEnergyGainRate: 1.0,
   heroMaxEnergy: 100,
   ult_speed_mult: 6,
+
+  meleeDmgGrowth: 1,
+  rangedDmgGrowth: 1,
+  elementalDmgGrowth: 1,
+  hpGrowth: 1,
 };
 
 export const RARITY_COLORS: Record<string, string> = {
@@ -85,9 +90,10 @@ export const HERO_UNIT: Unit = {
   id: 'hero',
   name: 'Keyboard Warrior',
   emoji: '🦸‍♂️',
-  description: 'The commander. Gains energy over time to unleash a powerful ultimate attack. Its attack pattern can be upgraded.',
+  description: '作为指挥官，英雄会随时间获取能量以释放强大的终极技能。其攻击模式可以通过升级进行改变。',
   type: 'RANGED',
-  damage: 12, // DPS equivalent to ~5 starting units
+  baseDamage: 12,
+  scaling: { rangedDmg: 1.0 },
   range: 99, 
   cooldown: 0,
   maxCooldown: 1.0,

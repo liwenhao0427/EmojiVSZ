@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { PlayerStats, DraftOption, Unit, WeaponClass, UnitData, HeroUpgradeStatus } from '../types';
 import { Sparkles, Sword, Zap, User, ArrowUpCircle, Flame, Target, Disc } from 'lucide-react';
@@ -17,7 +18,8 @@ const unitDataToDraftUnit = (w: UnitData): Partial<Unit> => ({
     name: w.name,
     emoji: w.emoji,
     type: w.type,
-    damage: w.damage,
+    // FIX: Changed property from `damage` to `baseDamage` to match Unit and UnitData types.
+    baseDamage: w.baseDamage,
     maxCooldown: w.cd,
     hp: w.maxHp,
     maxHp: w.maxHp,

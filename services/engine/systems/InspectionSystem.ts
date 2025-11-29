@@ -69,7 +69,7 @@ export class InspectionSystem implements System {
       const enemy = gameState.enemies.find(e => e.id === id);
       if (enemy) {
         const breakdown: StatsBreakdown = {
-          damage: { base: enemy.damage, bonus: 0, multiplier: 1 },
+          damage: { base: enemy.damage, bonus: 0, multiplier: 1, scaled: [] },
           cooldown: { base: 1.0, multiplier: 1 }
         };
         callbacks.onInspect?.({ type: 'ENEMY', data: enemy, statsBreakdown: breakdown });
@@ -96,7 +96,7 @@ export class InspectionSystem implements System {
       const dist = Math.hypot(e.x - mx, e.y - my);
       if (dist <= e.radius) {
         const breakdown: StatsBreakdown = {
-          damage: { base: e.damage, bonus: 0, multiplier: 1 },
+          damage: { base: e.damage, bonus: 0, multiplier: 1, scaled: [] },
           cooldown: { base: 1.0, multiplier: 1 }
         };
         return { type: 'ENEMY', data: e, statsBreakdown: breakdown };
@@ -107,7 +107,13 @@ export class InspectionSystem implements System {
   }
   
   private getUnitBreakdown(unit: Unit, stats: PlayerStats): StatsBreakdown {
-      const typeBonus = this.getTypeBonus(unit.type, stats);
+      const scaled: Array<{ source: string; emoji: string; value: number; percentage: number; }> = [];
+      if (unit.scaling) {
+        if (unit.scaling.meleeDmg) scaled.push({ source: '近战', emoji: '🔪', value: (stats.meleeDmg || 0) * unit.scaling.meleeDmg, percentage: unit.scaling.meleeDmg });
+        if (unit.scaling.rangedDmg) scaled.push({ source: '远程', emoji: '🏹', value: (stats.rangedDmg || 0) * unit.scaling.rangedDmg, percentage: unit.scaling.rangedDmg });
+        if (unit.scaling.elementalDmg) scaled.push({ source: '魔法', emoji: '🔮', value: (stats.elementalDmg || 0) * unit.scaling.elementalDmg, percentage: unit.scaling.elementalDmg });
+        if (unit.scaling.maxHp) scaled.push({ source: '生命', emoji: '❤️', value: unit.maxHp * unit.scaling.maxHp, percentage: unit.scaling.maxHp });
+      }
       
       const unitData = Object.values(UNIT_DATA).find(ud => ud.name === unit.name);
       const baseMaxHp = unitData ? unitData.maxHp : unit.maxHp;
@@ -127,8 +133,9 @@ export class InspectionSystem implements System {
 
       return {
           damage: { 
-              base: unit.damage, 
-              bonus: typeBonus, 
+              base: unit.baseDamage, 
+              scaled: scaled,
+              bonus: 0, // Placeholder for other bonuses like stick
               multiplier: totalDmgMultiplier,
               breakdown: {
                   globalPct: globalDmgPct,
