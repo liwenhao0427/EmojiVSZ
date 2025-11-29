@@ -9,6 +9,8 @@ import { useGameStore } from '../../../store/useGameStore';
 import { SpatialHashGrid } from '../utils/SpatialHashGrid';
 import { SimpleObjectPool } from '../utils/SimpleObjectPool';
 import { audioManager } from '../../audioManager';
+import { ENEMY_DATA } from '../../../data/enemies';
+import { Log } from '../../Log';
 
 export class ProjectileSystem implements System {
   
@@ -184,6 +186,7 @@ export class ProjectileSystem implements System {
   }
 
   private applyHit(p: Projectile, target: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
+      Log.debug('Projectile', `Applying hit. Damage: ${p.damage}. Target HP before: ${target.hp.toFixed(1)}`);
       target.hp -= p.damage;
       target.hitFlash = 0.2;
       audioManager.play('hit', { volume: 0.3 });
@@ -241,13 +244,11 @@ export class ProjectileSystem implements System {
     e.deathTimer = 1.0; // Start 1-second death animation
     audioManager.play('death', { volume: 0.4 });
     
-    // NERFED XP
-    const isBoss = e.type === 'BOSS';
-    const isElite = e.type === 'ELITE';
-    
-    const xp = isBoss ? 15 : isElite ? 7 : 3;
-    const gold = isBoss ? 20 : isElite ? 10 : 5;
+    const enemyData = e.name ? ENEMY_DATA[e.name] : null;
+    const xp = enemyData?.xp ?? 3;
+    const gold = enemyData?.gold ?? 5;
 
+    Log.log('战斗', `击杀了 ${e.name}！获得 ${xp} 经验和 ${gold} 金币。`);
     callbacks.onGainLoot?.(xp, gold);
 
     this.floatingTextSystem.addText(gameState, e.x, e.y - 20, `+${xp} XP`, 'cyan');

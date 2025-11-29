@@ -1,7 +1,9 @@
 
+
+
 import React from 'react';
-import { InspectableEntity, Unit } from '../types';
-import { Sword, Wind, Target, Activity, Crosshair } from 'lucide-react';
+import { InspectableEntity, Unit, StatsBreakdown } from '../types';
+import { Sword, Wind, Target, Activity, Crosshair, Heart } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
 import { CELL_SIZE, CANVAS_WIDTH, GRID_COLS } from '../constants';
 
@@ -51,54 +53,60 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
       finalCooldown = statsBreakdown.cooldown.base.toFixed(2);
   }
 
-  // Build the tooltip string.
+  // Build the tooltip strings.
   let dmgTooltip = `基础: ${statsBreakdown.damage.base}\n加成: +${statsBreakdown.damage.bonus}`;
   let cdTooltip = `基础: ${statsBreakdown.cooldown.base}s`;
+  let hpTooltip = '计算中...';
 
-  if (isUnit && statsBreakdown.damage.breakdown) {
-      const db = statsBreakdown.damage.breakdown;
-      const cb = statsBreakdown.cooldown.breakdown;
+  if (isUnit) {
+      if (statsBreakdown.damage.breakdown) {
+          const db = statsBreakdown.damage.breakdown;
+          const cb = statsBreakdown.cooldown.breakdown;
 
-      const dmgMultiplierParts = [
-          `全局: x${(1 + db.globalPct).toFixed(2)}`,
-          db.heroPct > 0 ? `英雄: x${(1 + db.heroPct).toFixed(2)}` : null,
-          db.tempPct > 0 ? `临时: x${(1 + db.tempPct).toFixed(2)}` : null
-      ].filter(Boolean).join('\n');
-      dmgTooltip += `\n---\n${dmgMultiplierParts}\n总倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
-      
-      const cdMultiplierParts = [
-          `全局: x${(1 + cb.globalPct).toFixed(2)}`,
-          cb.heroPct > 0 ? `英雄: x${(1 + cb.heroPct).toFixed(2)}` : null,
-          cb.tempPct > 0 ? `临时: x${(1 + cb.tempPct).toFixed(2)}` : null
-      ].filter(Boolean).join('\n');
-      cdTooltip += `\n---\n${cdMultiplierParts}\n总倍率: x${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
-  } else {
-      dmgTooltip += `\n倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
-      cdTooltip += `\n倍率: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
+          const dmgMultiplierParts = [
+              `全局: x${(1 + db.globalPct).toFixed(2)}`,
+              db.heroPct > 0 ? `英雄: x${(1 + db.heroPct).toFixed(2)}` : null,
+              db.tempPct > 0 ? `临时: x${(1 + db.tempPct).toFixed(2)}` : null
+          ].filter(Boolean).join('\n');
+          dmgTooltip += `\n---\n${dmgMultiplierParts}\n总倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
+          
+          const cdMultiplierParts = [
+              `全局: x${(1 + cb.globalPct).toFixed(2)}`,
+              cb.heroPct > 0 ? `英雄: x${(1 + cb.heroPct).toFixed(2)}` : null,
+              cb.tempPct > 0 ? `临时: x${(1 + cb.tempPct).toFixed(2)}` : null
+          ].filter(Boolean).join('\n');
+          cdTooltip += `\n---\n${cdMultiplierParts}\n总倍率: x${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
+      } else {
+          dmgTooltip += `\n倍率: x${statsBreakdown.damage.multiplier.toFixed(2)}`;
+          cdTooltip += `\n倍率: /${statsBreakdown.cooldown.multiplier.toFixed(2)}`;
+      }
+      if (statsBreakdown.hp) {
+          const hpb = statsBreakdown.hp;
+          hpTooltip = `基础: ${hpb.base}\n加成: +${hpb.bonus}\n倍率: x${hpb.multiplier.toFixed(2)}`;
+      }
   }
+
 
   const hpPct = Math.max(0, data.hp / data.maxHp) * 100;
 
-  const rangeInPixels = 'range' in data ? (data as Unit).range : 0;
-  const rangeInCells = Math.floor(rangeInPixels / CELL_SIZE);
+  const rangeInPixels = 'range' in data ? (data as Unit).range * CELL_SIZE : 0;
+  const rangeInCells = 'range' in data ? (data as Unit).range : 0;
   const displayRange = rangeInPixels >= 2000 ? "全屏" : `${rangeInCells} 格`;
   
   const attackPatternDisplay = isUnit && 'attackPattern' in data 
       ? ATTACK_PATTERN_MAP[(data as Unit).attackPattern || 'NONE'] 
       : null;
 
-  // Determine Position Logic
   const entityIsOnRight = isUnit 
       ? (data as Unit).col >= GRID_COLS / 2 
       : (data as any).x > CANVAS_WIDTH / 2;
   
   const panelPositionClass = entityIsOnRight ? 'left-4' : 'right-4';
-  const tooltipOnRight = entityIsOnRight; // If panel is on left, tooltip should be on right
+  const tooltipOnRight = entityIsOnRight;
 
   return (
     <div className={`absolute ${panelPositionClass} top-24 w-64 glass-panel p-5 animate-in slide-in-from-${entityIsOnRight ? 'left' : 'right'} duration-300 pointer-events-none shadow-2xl shadow-blue-900/10 transition-all`}>
         
-        {/* Header */}
         <div className="flex items-center gap-4 mb-4">
             <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-4xl shadow-sm border border-slate-100">
                 {data.emoji}
@@ -113,15 +121,13 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
             </div>
         </div>
         
-        {/* Description */}
         {data.description && (
             <div className="text-xs font-bold text-slate-500 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-normal">
                 {data.description}
             </div>
         )}
 
-        {/* Health Bar */}
-        <div className="mb-5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+        <div className="group relative mb-5 bg-slate-50 p-3 rounded-xl border border-slate-100 pointer-events-auto cursor-help">
             <div className="flex justify-between text-[10px] text-slate-400 mb-1.5 font-bold">
                 <span>HP</span>
                 <span className="font-mono text-slate-600">{Math.ceil(data.hp)} / {data.maxHp}</span>
@@ -132,9 +138,16 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ entity }) => {
                     style={{ width: `${hpPct}%` }}
                 />
             </div>
+            {isUnit && (
+                <div className={`
+                    hidden group-hover:block absolute top-full mt-2 w-52 bg-slate-800 text-white p-3 rounded-xl shadow-xl z-50 text-xs pointer-events-none whitespace-pre-wrap leading-relaxed
+                    ${tooltipOnRight ? 'left-0' : 'right-0'}
+                `}>
+                    {hpTooltip}
+                </div>
+            )}
         </div>
 
-        {/* Stats Grid */}
         <div className="bg-white rounded-xl border border-slate-100 p-3 shadow-sm pointer-events-auto">
              <StatRow 
                 icon={Sword} 

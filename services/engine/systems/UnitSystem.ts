@@ -1,4 +1,6 @@
 
+
+
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -7,6 +9,7 @@ import { Unit, Enemy, Projectile, PlayerStats } from '../../../types';
 import { GRID_ROWS, GRID_OFFSET_Y, GRID_OFFSET_X, CELL_SIZE } from '../../../constants';
 import { ProjectileSystem } from './ProjectileSystem'; 
 import { audioManager } from '../../audioManager';
+import { ENEMY_DATA } from '../../../data/enemies';
 
 export class UnitSystem implements System {
   private unitCooldowns: Map<string, number> = new Map();
@@ -79,14 +82,15 @@ export class UnitSystem implements System {
 
       const unitX = GRID_OFFSET_X + (u.col * CELL_SIZE) + CELL_SIZE / 2;
       const unitY = GRID_OFFSET_Y + (u.row * CELL_SIZE) + CELL_SIZE / 2;
+      const rangeInPixels = u.range * CELL_SIZE;
       
       // Default: same row targeting for non-magic
-      let validEnemies = gameState.enemies.filter(e => e.row === u.row && e.x > unitX && Math.abs(e.x - unitX) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
+      let validEnemies = gameState.enemies.filter(e => e.row === u.row && e.x > unitX && Math.abs(e.x - unitX) <= rangeInPixels && (!e.deathTimer || e.deathTimer <= 0));
 
       // Global targeting for magic, hero with tracking, or specific effects/range
-      const isGlobalRange = u.type === 'MAGIC' || (u.isHero && u.attackType === 'TRACKING') || !!u.effects?.is_tracking || u.range > 1500;
+      const isGlobalRange = u.type === 'MAGIC' || (u.isHero && u.attackType === 'TRACKING') || !!u.effects?.is_tracking || u.range > 20;
       if (isGlobalRange) {
-        validEnemies = gameState.enemies.filter(e => Math.hypot(e.x - unitX, e.y - unitY) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
+        validEnemies = gameState.enemies.filter(e => Math.hypot(e.x - unitX, e.y - unitY) <= rangeInPixels && (!e.deathTimer || e.deathTimer <= 0));
       }
       
       if (validEnemies.length === 0) return;
@@ -106,9 +110,9 @@ export class UnitSystem implements System {
                   ? gameState.enemies.filter(e => {
                       const dist = Math.hypot(e.x - unitX, e.y - unitY);
                       const angle = Math.atan2(e.y - unitY, e.x - unitX);
-                      return dist <= u.range && Math.abs(angle) < Math.PI / 4 && (!e.deathTimer || e.deathTimer <= 0);
+                      return dist <= rangeInPixels && Math.abs(angle) < Math.PI / 4 && (!e.deathTimer || e.deathTimer <= 0);
                     })
-                  : gameState.enemies.filter(e => e.row === u.row && e.x > unitX && e.x < unitX + u.range && (!e.deathTimer || e.deathTimer <= 0));
+                  : gameState.enemies.filter(e => e.row === u.row && e.x > unitX && e.x < unitX + rangeInPixels && (!e.deathTimer || e.deathTimer <= 0));
 
               affectedEnemies.forEach(e => {
                   e.hp -= damage;
@@ -149,7 +153,8 @@ export class UnitSystem implements System {
     
     if (u.state === 'READY' && u.effects?.explode_on_contact) {
         const unitX = GRID_OFFSET_X + (u.col * CELL_SIZE) + CELL_SIZE / 2;
-        const enemyInRange = gameState.enemies.find(e => e.row === u.row && Math.abs(e.x - unitX) <= u.range && (!e.deathTimer || e.deathTimer <= 0));
+        const rangeInPixels = u.range * CELL_SIZE;
+        const enemyInRange = gameState.enemies.find(e => e.row === u.row && Math.abs(e.x - unitX) <= rangeInPixels && (!e.deathTimer || e.deathTimer <= 0));
         if (enemyInRange) {
             this.triggerExplosion(u, gameState, callbacks);
             u.hp = 0;
@@ -162,9 +167,10 @@ export class UnitSystem implements System {
       const unitX = GRID_OFFSET_X + u.col * CELL_SIZE + CELL_SIZE / 2;
       const unitY = GRID_OFFSET_Y + u.row * CELL_SIZE + CELL_SIZE / 2;
       const damage = this.calculateFinalDamage(u, useGameStore.getState().stats);
+      const rangeInPixels = u.range * CELL_SIZE;
       
       gameState.enemies.forEach(e => {
-          if (Math.hypot(e.x - unitX, e.y - unitY) < u.range && (!e.deathTimer || e.deathTimer <= 0)) {
+          if (Math.hypot(e.x - unitX, e.y - unitY) < rangeInPixels && (!e.deathTimer || e.deathTimer <= 0)) {
               e.hp -= damage;
               e.hitFlash = 0.3;
               callbacks.onAddFloatingText?.(gameState, `-${damage}`, 'orange', e.x, e.y);
@@ -179,6 +185,7 @@ export class UnitSystem implements System {
       if (u.type === 'MELEE') flatBonus = stats.meleeDmg;
       if (u.type === 'RANGED') flatBonus = stats.rangedDmg;
       if (u.type === 'MAGIC') flatBonus = stats.elementalDmg;
+      if (u.type === 'ENGINEERING') flatBonus = stats.engineering;
       
       const globalDmgMult = (1 + (stats.damagePercent || 0)) * (1 + (stats.tempDamageMult || 0));
 
@@ -191,8 +198,9 @@ export class UnitSystem implements System {
     e.deathTimer = 1.0; // Start 1-second death animation
     audioManager.play('death', { volume: 0.4 });
     
-    const xp = e.type === 'BOSS' ? 15 : e.type === 'ELITE' ? 7 : 3;
-    const gold = e.type === 'BOSS' ? 20 : e.type === 'ELITE' ? 10 : 5;
+    const enemyData = e.name ? ENEMY_DATA[e.name] : null;
+    const xp = enemyData?.xp ?? 3;
+    const gold = enemyData?.gold ?? 5;
     
     callbacks.onGainLoot?.(xp, gold);
 

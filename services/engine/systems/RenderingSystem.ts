@@ -1,4 +1,6 @@
 
+
+
 import { GameState } from '../GameState';
 import { Unit, InspectableEntity } from '../../../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../constants';
@@ -65,7 +67,7 @@ export class RenderingSystem {
 
       let lungeOffset = 0;
       if (u.attackPattern === 'THRUST' && u.attackState === 'ATTACKING' && u.attackProgress) {
-          const lungeDistance = u.range * 0.6;
+          const lungeDistance = u.range * CELL_SIZE * 0.6;
           lungeOffset = Math.sin(u.attackProgress * Math.PI) * lungeDistance;
       }
 
@@ -293,9 +295,9 @@ export class RenderingSystem {
       const finalDamage = Math.round((u.damage + flatBonus) * globalDmgMult * heroDmgMult);
 
       // Damage (Left, Yellow)
-      this.drawStatBadge(-25, statY, finalDamage, '#facc15', '⚔️'); 
+      this.drawStatBadge(-25, statY, finalDamage, '#facc15'); 
       // HP (Right, Red)
-      this.drawStatBadge(25, statY, Math.ceil(u.hp), '#f87171', '❤️');
+      this.drawStatBadge(25, statY, Math.ceil(u.hp), '#f87171', u.maxHp);
 
       // Hero Energy Bar
       if (u.isHero) {
@@ -333,24 +335,27 @@ export class RenderingSystem {
     this.ctx.restore();
   }
 
-  private drawStatBadge(x: number, y: number, value: number, bgColor: string, icon: string) {
-      // Circle Bg
+  private drawStatBadge(x: number, y: number, value: number, bgColor: string, maxValue?: number) {
       this.ctx.beginPath();
       this.ctx.arc(x, y, 16, 0, Math.PI * 2);
       this.ctx.fillStyle = bgColor;
       this.ctx.fill();
       
-      // Outline
       this.ctx.strokeStyle = '#ffffff';
       this.ctx.lineWidth = 3;
       this.ctx.stroke();
 
-      // Value
-      this.ctx.fillStyle = '#1e293b'; // Slate 800
-      this.ctx.font = `800 14px 'Fredoka', Arial`; // Extra bold
+      this.ctx.fillStyle = '#1e293b';
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(Math.floor(value).toString(), x, y + 1);
+
+      if (maxValue) {
+          this.ctx.font = `800 11px 'Fredoka', Arial`;
+          this.ctx.fillText(`${value}/${maxValue}`, x, y + 1);
+      } else {
+          this.ctx.font = `800 14px 'Fredoka', Arial`;
+          this.ctx.fillText(String(value), x, y + 1);
+      }
   }
 
   private drawEnemies(gameState: GameState) {
@@ -404,12 +409,11 @@ export class RenderingSystem {
       
       if (!e.deathTimer || e.deathTimer <= 0) {
           const statY = 40;
-          // Stats are drawn in a separate pass to avoid scaling with the enemy
           this.ctx.save();
-          this.ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
-          this.ctx.translate(drawX, drawY); // Manually translate to enemy position
-          this.drawStatBadge(-20, statY, e.damage, '#facc15', '');
-          this.drawStatBadge(20, statY, Math.ceil(e.hp), '#f87171', '');
+          this.ctx.setTransform(1, 0, 0, 1, 0, 0); 
+          this.ctx.translate(drawX, drawY); 
+          this.drawStatBadge(-20, statY, e.damage, '#facc15');
+          this.drawStatBadge(20, statY, Math.ceil(e.hp), '#f87171', e.maxHp);
           this.ctx.restore();
       }
       
@@ -423,6 +427,7 @@ export class RenderingSystem {
     const vis = this.visualUnits.get(u.id);
     if (!vis) return;
     const { x, y } = vis;
+    const rangeInPixels = u.range * CELL_SIZE;
 
     this.ctx.save();
     this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
@@ -432,10 +437,10 @@ export class RenderingSystem {
     if (u.isHero && u.attackType === 'PENTA_SHOT') {
       const rectY = GRID_OFFSET_Y;
       const rectHeight = GRID_ROWS * CELL_SIZE;
-      this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, rectHeight);
+      this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, rangeInPixels, rectHeight);
     } else {
         const rectY = GRID_OFFSET_Y + u.row * CELL_SIZE;
-        this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, u.range, CELL_SIZE);
+        this.ctx.strokeRect(x - CELL_SIZE / 2, rectY, rangeInPixels, CELL_SIZE);
     }
     this.ctx.restore();
   }

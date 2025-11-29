@@ -1,7 +1,4 @@
 
-
-
-
 import { PlayerStats, Unit, Rarity } from './types';
 
 export const CANVAS_WIDTH = 1200; 
@@ -34,10 +31,14 @@ export const INITIAL_STATS: PlayerStats = {
   pickupRange: 1.0,
   xpGain: 1.0,
   shopDiscount: 0,
+  flatHp: 0,
+  hpPercent: 0,
+  harvesting: 0,
 
   meleeDmg: 0,
   rangedDmg: 0,
   elementalDmg: 0,
+  engineering: 0,
 
   tempDamageMult: 0,
   tempAttackSpeedMult: 0,
@@ -56,6 +57,20 @@ export const RARITY_COLORS: Record<string, string> = {
   LEGENDARY: '#ef4444'
 };
 
+export const RARITY_BG_COLORS: Record<string, string> = {
+  COMMON: 'bg-white',
+  RARE: 'bg-blue-50',
+  EPIC: 'bg-purple-50',
+  LEGENDARY: 'bg-red-50'
+};
+
+export const RARITY_HOVER_BG_COLORS: Record<string, string> = {
+    COMMON: 'hover:bg-slate-50',
+    RARE: 'hover:bg-blue-100',
+    EPIC: 'hover:bg-purple-100',
+    LEGENDARY: 'hover:bg-red-100'
+};
+
 export const TIER_TO_RARITY: Record<number, Rarity> = {
   1: 'COMMON',
   2: 'RARE',
@@ -71,7 +86,7 @@ export const HERO_UNIT: Unit = {
   description: 'The commander. Gains energy over time to unleash a powerful ultimate attack. Its attack pattern can be upgraded.',
   type: 'RANGED',
   damage: 25, // DPS equivalent to ~5 starting units
-  range: 9999, 
+  range: 99, 
   cooldown: 0,
   maxCooldown: 1.0,
   hp: 200,

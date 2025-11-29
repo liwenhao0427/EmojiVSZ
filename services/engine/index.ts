@@ -1,4 +1,5 @@
 
+
 import { GamePhase, InspectableEntity } from '../../types';
 import { useGameStore } from '../../store/useGameStore';
 import { GameState } from './GameState';
@@ -74,7 +75,8 @@ export class GameEngine {
   }
 
   public reset() {
-    Log.i('Engine', 'Resetting engine state completely.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('Engine', 'Resetting engine state completely.');
     this.stop();
     this.gameState.reset();
     this.unitSystem.reset();
@@ -94,7 +96,8 @@ export class GameEngine {
   }
 
   public startWave(duration: number, wave: number) {
-    Log.i('Engine', `startWave called with duration=${duration}, wave=${wave}.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('Engine', `startWave called with duration=${duration}, wave=${wave}.`);
     this.lastTime = performance.now();
     this.gameState.reset();
     this.gameState.waveTime = duration > 0 ? duration : 30;

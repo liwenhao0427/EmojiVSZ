@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from './services/engine';
 import { LevelUpModal } from './components/LevelUpModal';
@@ -29,12 +30,14 @@ export default function App() {
   useEffect(() => {
     audioManager.load(SOUND_MAP);
     Log.displayLogsUI();
-    Log.i('App', 'Component mounted, audio loaded, log UI initialized.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('App', 'Component mounted, audio loaded, log UI initialized.');
   }, []);
 
   useEffect(() => {
     if (canvasRef.current && !engineRef.current) {
-      Log.i('EngineInit', 'Canvas is ready, creating GameEngine instance.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+      Log.log('EngineInit', 'Canvas is ready, creating GameEngine instance.');
       engineRef.current = new GameEngine(
         canvasRef.current,
         {
@@ -52,7 +55,8 @@ export default function App() {
                   newLevel += 1;
                   newMaxXp = Math.floor(newMaxXp * 1.5); 
                   didLevelUp = true;
-                  Log.i('AppCallback', `Level Up! New level: ${newLevel}`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+                  Log.log('AppCallback', `Level Up! New level: ${newLevel}`);
               }
 
               useGameStore.setState(s => ({ 
@@ -68,15 +72,18 @@ export default function App() {
               if (didLevelUp) {
                   engineRef.current?.stop();
                   setShowLevelUp(true);
-                  Log.i('AppCallback', 'Level up detected. Pausing engine and showing level up modal.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+                  Log.log('AppCallback', 'Level up detected. Pausing engine and showing level up modal.');
               }
           },
           onWaveEnd: () => {
-              Log.i('EngineCallback', 'onWaveEnd triggered. Calling endWaveAndGoToShop.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+              Log.log('EngineCallback', 'onWaveEnd triggered. Calling endWaveAndGoToShop.');
               endWaveAndGoToShop();
           },
           onGameOver: () => {
-              Log.i('EngineCallback', 'onGameOver triggered. Setting phase to GAME_OVER.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+              Log.log('EngineCallback', 'onGameOver triggered. Setting phase to GAME_OVER.');
               engineRef.current?.stop();
               setPhase(GamePhase.GAME_OVER);
           },
@@ -88,19 +95,22 @@ export default function App() {
     }
     
     return () => {
-        Log.i('EngineInit', 'App unmounting, cleaning up engine.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+        Log.log('EngineInit', 'App unmounting, cleaning up engine.');
         engineRef.current?.cleanup();
     };
   }, []);
 
   useEffect(() => {
-    Log.i('PhaseLogic', `Phase changed to: ${phase}`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('PhaseLogic', `Phase changed to: ${phase}`);
     if (phase === GamePhase.SHOP) {
         setShopVisible(true);
         const nextWaveNumber = stats.wave + 1;
         const config = WAVE_DATA.find(w => w.wave === nextWaveNumber) || WAVE_DATA[WAVE_DATA.length - 1];
         setTimeLeft(config.duration);
-        Log.i('PhaseLogic', `Entered SHOP. Pre-set timer for next wave (${nextWaveNumber}) to ${config.duration}s.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+        Log.log('PhaseLogic', `Entered SHOP. Pre-set timer for next wave (${nextWaveNumber}) to ${config.duration}s.`);
     }
   }, [phase]);
 
@@ -109,26 +119,32 @@ export default function App() {
         audioManager.play('music', { loop: true, volume: 0.2 });
         // If wave has already started, we are resuming from pause.
         if (waveStartedRef.current === stats.wave) {
-             Log.i('EngineControl', `Resuming combat phase. Starting engine.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+             Log.log('EngineControl', `Resuming combat phase. Starting engine.`);
              engineRef.current?.start();
         } else {
-             Log.i('EngineControl', `New wave detected. Deferring engine start to WaveSync.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+             Log.log('EngineControl', `New wave detected. Deferring engine start to WaveSync.`);
         }
     } else if (phase === GamePhase.SHOP && !showLevelUp && !showPermanentLevelUp) {
-        Log.i('EngineControl', `Phase is SHOP. Ensuring engine is RUNNING for UI.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+        Log.log('EngineControl', `Phase is SHOP. Ensuring engine is RUNNING for UI.`);
         engineRef.current?.start();
         audioManager.stopMusic();
     } else {
-        Log.i('EngineControl', `Phase is ${phase} or level up is shown. Ensuring engine is STOPPED.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+        Log.log('EngineControl', `Phase is ${phase} or level up is shown. Ensuring engine is STOPPED.`);
         audioManager.stopMusic();
         engineRef.current?.stop();
     }
   }, [phase, showLevelUp, showPermanentLevelUp, stats.wave]);
   
   useEffect(() => {
-    Log.i('WaveSync', `Checking if wave should start. Phase: ${phase}, ShowLevelUp: ${showLevelUp}, WaveRef: ${waveStartedRef.current}, StoreWave: ${stats.wave}`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('WaveSync', `Checking if wave should start. Phase: ${phase}, ShowLevelUp: ${showLevelUp}, WaveRef: ${waveStartedRef.current}, StoreWave: ${stats.wave}`);
     if (phase === GamePhase.COMBAT && !showLevelUp && waveStartedRef.current !== stats.wave) {
-        Log.i('WaveSync', `CONDITION MET. Starting wave ${stats.wave}. Updating ref to ${stats.wave}.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+        Log.log('WaveSync', `CONDITION MET. Starting wave ${stats.wave}. Updating ref to ${stats.wave}.`);
         waveStartedRef.current = stats.wave;
         const config = WAVE_DATA.find(w => w.wave === stats.wave) || WAVE_DATA[WAVE_DATA.length-1];
         engineRef.current?.startWave(config.duration, stats.wave);
@@ -136,7 +152,8 @@ export default function App() {
   }, [phase, showLevelUp, stats.wave]);
 
   const handleStartGame = () => {
-    Log.i('App', '--- NEW GAME STARTED ---');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('App', '--- NEW GAME STARTED ---');
     engineRef.current?.reset();
     waveStartedRef.current = 0;
     
@@ -144,25 +161,29 @@ export default function App() {
     
     const wave1Config = WAVE_DATA.find(w => w.wave === 1) || WAVE_DATA[0];
     setTimeLeft(wave1Config.duration);
-    Log.i('App', `handleStartGame: Set timer for wave 1 to ${wave1Config.duration}s.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('App', `handleStartGame: Set timer for wave 1 to ${wave1Config.duration}s.`);
 
     setShowLevelUp(false);
     setInspectedEntity(null);
   };
 
   const handleRestart = () => {
-    Log.i('App', 'Restart button clicked.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('App', 'Restart button clicked.');
     handleStartGame();
   };
 
   const handleDraftSelect = (option: DraftOption) => {
-      Log.i('App', `Draft selected: ${option.name}. Resuming combat.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+      Log.log('App', `Draft selected: ${option.name}. Resuming combat.`);
       applyDraft(option, false);
       setShowLevelUp(false);
   };
 
   const handlePermanentDraftSelect = (option: DraftOption) => {
-      Log.i('App', `Permanent Draft selected: ${option.name}.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+      Log.log('App', `Permanent Draft selected: ${option.name}.`);
       applyDraft(option, true);
   };
 

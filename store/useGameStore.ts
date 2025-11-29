@@ -12,7 +12,10 @@ const STAT_KEY_MAP: Record<string, string> = {
   percentDmg: 'damagePercent',
   atkSpeed: 'attackSpeed',
   crit: 'critChance',
-  shop_discount: 'shopDiscount'
+  shop_discount: 'shopDiscount',
+  flatHp: 'flatHp',
+  hpPercent: 'hpPercent',
+  harvesting: 'harvesting'
 };
 
 interface GameStore {
@@ -155,7 +158,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
     }
 
-    Log.i('Store', 'initGame: Resetting all stats and units for a new game.');
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+    Log.log('Store', 'initGame: Resetting all stats and units for a new game.');
     set({
       stats: { ...INITIAL_STATS, wave: 1, gold: 10, heroLevel: 1 }, 
       gridUnits: starters,
@@ -174,6 +178,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     for (let c = 0; c < GRID_COLS; c++) {
       for (let r = 0; r < GRID_ROWS; r++) {
         if (!units.find(u => u.row === r && u.col === c)) {
+          
+          const stats = get().stats;
+          const baseMaxHp = 'maxHp' in data && typeof data.maxHp === 'number' ? data.maxHp : 100;
+          const finalMaxHp = Math.round((baseMaxHp + (stats.flatHp || 0)) * (1 + (stats.hpPercent || 0)));
 
           const newUnit: Unit = {
             id: uuidv4(),
@@ -181,11 +189,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             emoji: data.emoji || '📦',
             type: data.type || 'RANGED',
             damage: data.damage || 10,
-            range: data.range || 1200,
+            range: data.range || 5,
             cooldown: 0,
             maxCooldown: 'cd' in data && typeof data.cd === 'number' ? data.cd : ((data as Partial<Unit>).maxCooldown || 1.0),
-            hp: data.maxHp || ('hp' in data && typeof data.hp === 'number' ? data.hp : 100),
-            maxHp: data.maxHp || 100,
+            hp: finalMaxHp,
+            maxHp: finalMaxHp,
             row: r,
             col: c,
             description: 'desc' in data ? data.desc : data.description,
@@ -222,6 +230,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (!unitData) return null;
 
       const refund = Math.floor(unitData.price * 0.5);
+      
+      Log.event('战场', `玩家出售了单位 ${unit.name}，获得 ${refund} 金币。`);
 
       set({
           stats: { ...stats, gold: stats.gold + refund },
@@ -280,11 +290,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newOwnedItems[item.id] = (newOwnedItems[item.id] || 0) + 1;
       
       const newStats = calculateFinalStats(newOwnedItems, state.allItems, state.stats);
-      newStats.gold -= item.price; // Deduct gold after calculation
+      newStats.gold -= item.price;
+
+      const updatedUnits = state.gridUnits.map(u => {
+        const unitData = Object.values(UNIT_DATA).find(ud => ud.name === u.name);
+        const baseMaxHp = unitData ? unitData.maxHp : u.maxHp; 
+        
+        const newMaxHp = Math.round((baseMaxHp + (newStats.flatHp || 0)) * (1 + (newStats.hpPercent || 0)));
+        
+        return { ...u, maxHp: newMaxHp, hp: newMaxHp };
+      });
 
       return {
         ownedItems: newOwnedItems,
-        stats: newStats
+        stats: newStats,
+        gridUnits: updatedUnits
       };
     });
   },
@@ -304,6 +324,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const unit = units[unitIndex];
       const targetUnit = units.find(u => u.row === tRow && u.col === tCol && u.id !== unitId);
+      
+      Log.event('战场', `玩家移动了单位 ${unit.name} 从 (${unit.row}, ${unit.col}) 到 (${tRow}, ${tCol})。`);
       
       if (targetUnit) {
         // Swap positions with the target unit (dead or alive)
@@ -389,12 +411,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   endWaveAndGoToShop: () => {
     set(state => {
-      Log.i('Store', `endWaveAndGoToShop: phase -> SHOP.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+      Log.log('Store', `endWaveAndGoToShop: phase -> SHOP.`);
+      
+      const harvestingGold = Math.floor(state.stats.harvesting || 0);
+      const newGold = state.stats.gold + harvestingGold;
+
+      const baseStats = calculateFinalStats(state.ownedItems, state.allItems, {...state.stats, gold: newGold });
+      
       const nextUnits = state.gridUnits
         .filter(u => !u.isTemp) 
-        .map(u => ({ ...u, hp: u.maxHp, isDead: false, energy: 0 }));
-      
-      const baseStats = calculateFinalStats(state.ownedItems, state.allItems, state.stats);
+        .map(u => {
+            const unitData = Object.values(UNIT_DATA).find(ud => ud.name === u.name);
+            const baseMaxHp = unitData ? unitData.maxHp : u.maxHp;
+            const newMaxHp = Math.round((baseMaxHp + (baseStats.flatHp || 0)) * (1 + (baseStats.hpPercent || 0)));
+            return { ...u, maxHp: newMaxHp, hp: newMaxHp, isDead: false, energy: 0 };
+        });
       
       // Apply permanent hero upgrades to stats for shop display
       const permStatus = state.permanentHeroUpgradeStatus;
@@ -410,6 +442,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       baseStats.xp = baseStats.heroXp;
       baseStats.maxXp = baseStats.heroMaxXp;
 
+      baseStats.lastHarvestYield = harvestingGold > 0 ? harvestingGold : null;
+
       return {
         gridUnits: nextUnits,
         stats: baseStats,
@@ -420,7 +454,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startNextWave: () => {
     set(state => {
-      Log.i('Store', `startNextWave: phase -> COMBAT, wave -> ${state.stats.wave + 1}.`);
+// FIX: Changed Log.i to Log.log as 'i' method does not exist.
+      Log.log('Store', `startNextWave: phase -> COMBAT, wave -> ${state.stats.wave + 1}.`);
       
       const startingStatus = { ...state.permanentHeroUpgradeStatus };
 
@@ -454,6 +489,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       nextStats.level = state.stats.heroLevel;
       nextStats.xp = state.stats.heroXp;
       nextStats.maxXp = state.stats.heroMaxXp;
+      nextStats.lastHarvestYield = null;
       
       // Apply Ultimate Upgrades that affect stats
       if (startingStatus.ultimate >= 1) nextStats.ult_duration_bonus = (nextStats.ult_duration_bonus || 0) + 1;
@@ -470,6 +506,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   applyDraft: (option, isPermanent = false) => {
     set(state => {
+      Log.event('升级', `玩家选择了 ${isPermanent ? '永久' : '临时'} 升级：'${option.name}'。`);
       const nextState: Partial<Pick<GameStore, 'gridUnits' | 'stats' | 'heroUpgradeStatus' | 'permanentHeroUpgradeStatus' | 'showPermanentLevelUp'>> = {}; 
       
       if (isPermanent) {

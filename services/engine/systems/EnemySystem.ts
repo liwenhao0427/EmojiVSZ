@@ -1,4 +1,8 @@
 
+
+
+
+
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -7,6 +11,7 @@ import { useGameStore } from '../../../store/useGameStore';
 import { GamePhase } from '../../../types';
 import { ENEMY_DATA } from '../../../data/enemies';
 import { WAVE_DATA } from '../../../data/waves';
+import { Log } from '../../Log';
 
 export class EnemySystem implements System {
   // New state for wave management
@@ -147,9 +152,12 @@ export class EnemySystem implements System {
 
     // Spawn behind the rightmost enemy in the lane, or at the default position if the lane is clear.
     const spawnX = Math.max(baseSpawnX, rightmostEnemyInRowX + spawnOffset);
+    
+    const newEnemyId = Math.random();
+    Log.log('EnemySystem', `Spawning '${enemyId}' (id: ${newEnemyId.toFixed(5)}) at row ${spawnRow}, x: ${spawnX.toFixed(0)}`);
 
     gameState.enemies.push({
-      id: Math.random(),
+      id: newEnemyId,
       x: spawnX,
       y: spawnY,
       radius: 24 * typeData.scale,
@@ -263,8 +271,9 @@ export class EnemySystem implements System {
     
     e.deathTimer = 1.0; 
     
-    const xp = e.type === 'BOSS' ? 15 : e.type === 'ELITE' ? 7 : 3;
-    const gold = e.type === 'BOSS' ? 20 : e.type === 'ELITE' ? 10 : 5;
+    const enemyData = e.name ? ENEMY_DATA[e.name] : null;
+    const xp = enemyData?.xp ?? 3;
+    const gold = enemyData?.gold ?? 5;
     
     callbacks.onGainLoot?.(xp, gold);
   }

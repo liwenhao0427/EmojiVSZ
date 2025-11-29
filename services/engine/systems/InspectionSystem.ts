@@ -1,4 +1,6 @@
 
+
+
 import { System } from '../System';
 import { GameState } from '../GameState';
 import { EngineCallbacks } from '../index';
@@ -6,6 +8,7 @@ import { useGameStore } from '../../../store/useGameStore';
 import { GRID_COLS, GRID_ROWS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../../../constants';
 import { InspectableEntity, StatsBreakdown, Unit, PlayerStats } from '../../../types';
 import { InputSystem } from './InputSystem';
+import { UNIT_DATA } from '../../../data/units';
 
 export class InspectionSystem implements System {
   private selectedEntityId: string | number | null = null;
@@ -105,6 +108,9 @@ export class InspectionSystem implements System {
   
   private getUnitBreakdown(unit: Unit, stats: PlayerStats): StatsBreakdown {
       const typeBonus = this.getTypeBonus(unit.type, stats);
+      
+      const unitData = Object.values(UNIT_DATA).find(ud => ud.name === unit.name);
+      const baseMaxHp = unitData ? unitData.maxHp : unit.maxHp;
     
       const globalDmgPct = stats.damagePercent || 0;
       const tempDmgPct = stats.tempDamageMult || 0;
@@ -115,6 +121,9 @@ export class InspectionSystem implements System {
       const tempAspdPct = stats.tempAttackSpeedMult || 0;
       const heroAspdPct = unit.isHero ? (stats.heroAttackSpeedMult || 0) : 0;
       const totalCdMultiplier = (1 + globalAspdPct) * (1 + tempAspdPct) * (1 + heroAspdPct);
+
+      const flatHpBonus = stats.flatHp || 0;
+      const hpPercentBonus = stats.hpPercent || 0;
 
       return {
           damage: { 
@@ -135,6 +144,11 @@ export class InspectionSystem implements System {
                   tempPct: tempAspdPct,
                   heroPct: heroAspdPct,
               }
+          },
+          hp: {
+              base: baseMaxHp,
+              bonus: flatHpBonus,
+              multiplier: 1 + hpPercentBonus
           }
       };
   }

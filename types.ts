@@ -4,6 +4,8 @@
 
 
 
+
+
 // FIX: Add 'ENGINEERING' to WeaponClass to support engineering units and fix type errors.
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
@@ -18,7 +20,7 @@ export interface Unit {
   
   // Combat Stats
   damage: number;
-  range: number; // In grid cells or pixels
+  range: number; // In grid cells
   cooldown: number; // Seconds
   maxCooldown: number;
   
@@ -97,11 +99,15 @@ export interface PlayerStats {
   pickupRange: number;
   xpGain: number;
   shopDiscount: number;
+  flatHp: number;
+  hpPercent: number;
+  harvesting: number;
 
   // Class Bonuses
   meleeDmg: number;
   rangedDmg: number;
   elementalDmg: number;
+  engineering: number;
 
   // Temporary Wave Buffs (Reset every wave)
   tempDamageMult: number;
@@ -117,6 +123,9 @@ export interface PlayerStats {
   // New hero-specific stats for upgrades
   heroEnergyGainRate?: number;
   heroMaxEnergy?: number;
+  
+  // For UI feedback
+  lastHarvestYield?: number | null;
   
   // Index signature for dynamic item effects
   [key: string]: number | undefined | any;
@@ -260,6 +269,7 @@ export interface UnitData {
   id: string;
   name: string;
   emoji: string;
+  tier: number;
   type: WeaponClass;
   attackPattern: 'SHOOT' | 'THRUST' | 'SWING' | 'STREAM' | 'NONE';
   price: number;
@@ -309,6 +319,12 @@ export type StatsBreakdown = {
             heroPct: number;
             tempPct: number;
         }
+    };
+    hp?: {
+        base: number;
+        bonus: number;
+        multiplier: number;
+        breakdown?: any;
     };
 };
 

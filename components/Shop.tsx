@@ -2,12 +2,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ShopItem, BrotatoItem, UnitData } from '../types';
-import { RARITY_COLORS, TIER_TO_RARITY, PRICE_MULTIPLIER, CELL_SIZE } from '../constants';
-import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown, Package, Sword, TrendingUp } from 'lucide-react';
+import { RARITY_COLORS, TIER_TO_RARITY, PRICE_MULTIPLIER, CELL_SIZE, RARITY_BG_COLORS } from '../constants';
+// FIX: Change 'Dice' to 'Dice1' as 'Dice' is not an exported member of 'lucide-react'.
+import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown, Package, Sword, TrendingUp, Dice1 } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
-import { rollShopItems } from '../services/itemGenerator';
+// FIX: Changed import from non-existent itemGenerator.ts to shopLogic.ts and updated function name.
+import { rollShop, getShopProbabilities } from '../services/shopLogic';
 import { UNIT_DATA } from '../data/units';
 import { InventoryPanel } from './InventoryPanel';
+import { Log } from '../services/Log';
 
 interface ShopProps {
   isVisible: boolean;
@@ -21,6 +24,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
   const [items, setItems] = useState<ShopItem[]>([]);
   const [rerollCount, setRerollCount] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [showProbs, setShowProbs] = useState(false);
 
   const allItemsBought = useMemo(() => items.length > 0 && items.every(item => item.bought), [items]);
   
@@ -29,57 +33,29 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
     return Math.floor((1 + Math.max(0, stats.wave - 1) + rerollCount) * PRICE_MULTIPLIER);
   }, [allItemsBought, stats.wave, rerollCount]);
 
+  const shopProbs = useMemo(() => {
+    return getShopProbabilities(stats.wave, stats.luck);
+  }, [stats.wave, stats.luck]);
+
 
   const generateShop = (keepLocked = true) => {
-    let newItems: ShopItem[] = [];
-    
-    if (keepLocked) {
-        newItems = items.filter(i => i.locked && !i.bought);
-    }
-    
-    const itemsToRoll = 4 - newItems.length;
-    if (itemsToRoll > 0) {
-      const rolledBrotatoItems = rollShopItems(stats.wave, stats.luck, ownedItems, itemsToRoll);
-      
-      rolledBrotatoItems.forEach(item => {
-        const basePrice = Math.round(item.price * PRICE_MULTIPLIER);
-        const price = Math.round(basePrice * (1 - (stats.shopDiscount || 0) / 100));
-        newItems.push({
-          id: uuidv4(),
-          type: 'ITEM',
-          data: item,
-          price,
-          locked: false,
-          bought: false
-        });
-      });
-    }
+    // FIX: Refactored shop generation to use the `rollShop` function from `shopLogic.ts`.
+    // This new logic preserves locked items and fills the remaining slots with new items.
+    const lockedItems = keepLocked ? items.filter(i => i.locked && !i.bought) : [];
+    const rolledItems = rollShop(stats.wave, stats.luck, ownedItems, stats.shopDiscount || 0);
 
-    const unitChance = 0.40 + (stats.luck * 0.01);
+    const finalItems = [...lockedItems];
+    const existingDataIds = new Set(lockedItems.map(item => item.data.id));
 
-    newItems.forEach((item, idx) => {
-        if (!item.locked && !item.bought && item.type === 'ITEM') {
-            if (Math.random() < unitChance) {
-                 const unitId = UNIT_ID_POOL[Math.floor(Math.random() * UNIT_ID_POOL.length)];
-                 const unitData = UNIT_DATA[unitId];
-                 if (unitData) {
-                    const basePrice = Math.round(unitData.price * PRICE_MULTIPLIER);
-                    const price = Math.round(basePrice * (1 - (stats.shopDiscount || 0) / 100));
-                    newItems[idx] = {
-                        id: uuidv4(),
-                        type: 'UNIT',
-                        data: unitData,
-                        price: price,
-                        locked: false,
-                        bought: false
-                    };
-                 }
-            }
+    for (const newItem of rolledItems) {
+        if (finalItems.length >= 4) break;
+        if (!existingDataIds.has(newItem.data.id)) {
+            finalItems.push(newItem);
+            existingDataIds.add(newItem.data.id);
         }
-    });
+    }
 
-
-    setItems(newItems.slice(0, 4).sort(() => Math.random() - 0.5));
+    setItems(finalItems.slice(0, 4).sort(() => Math.random() - 0.5));
   };
 
   useEffect(() => {
@@ -89,6 +65,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
 
   const handleBuy = (shopItem: ShopItem) => {
     if (stats.gold >= shopItem.price && !shopItem.bought) {
+        Log.event('商店', `玩家购买了 ${shopItem.data.name}，花费 ${shopItem.price} 金币。`);
         if (shopItem.type === 'ITEM') {
             const itemData = shopItem.data as BrotatoItem;
             const currentCount = ownedItems[itemData.id] || 0;
@@ -116,6 +93,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
 
   const handleReroll = () => {
     if (stats.gold >= rerollCost) {
+        Log.event('商店', `玩家刷新了商店，花费 ${rerollCost} 金币。`);
         if (rerollCost > 0) {
             useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold - rerollCost }}));
         }
@@ -132,6 +110,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
       const xpCost = 10;
       const xpGain = 10;
       if (stats.gold >= xpCost) {
+          Log.event('商店', `玩家购买了 ${xpGain} 点经验，花费 ${xpCost} 金币。`);
           buyExperience(xpGain, xpCost);
       }
   };
@@ -153,7 +132,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
       const attackSpeed = (1 + (stats.attackSpeed || 0));
       const cooldown = (unit.cd / Math.max(0.1, attackSpeed)).toFixed(2);
       
-      const rangeCells = Math.round(unit.range / CELL_SIZE);
+      const rangeCells = unit.range;
       
       return { damage, cooldown, rangeCells };
   };
@@ -177,9 +156,41 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
                     </h2>
                     <p className="text-slate-400 font-bold">第 {currentWave} 波准备阶段</p>
                 </div>
+
+                <div className="relative mt-2">
+                    <button onClick={() => setShowProbs(!showProbs)} className="flex items-center gap-2 text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-colors">
+                        <Dice1 size={14} />
+                        <span>商店概率</span>
+                        <ChevronDown size={14} className={`transition-transform ${showProbs ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showProbs && (
+                        <div className="absolute top-full left-0 mt-2 w-80 bg-white p-4 rounded-2xl shadow-lg border-2 border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-100">
+                                <h4 className="font-black text-slate-700">掉落率分布</h4>
+                                <div className="text-xs font-bold">
+                                    <span className="text-purple-600">单位: {(shopProbs.unitChance * 100).toFixed(0)}%</span> / <span className="text-green-600">物品: {((1 - shopProbs.unitChance) * 100).toFixed(0)}%</span>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-y-1 text-xs font-mono">
+                                <div className="font-bold text-slate-400">等级</div>
+                                <div className="font-bold text-slate-400 text-center">物品 %</div>
+                                <div className="font-bold text-slate-400 text-center">单位 %</div>
+                                
+                                {[1, 2, 3, 4].map(tier => (
+                                    <React.Fragment key={tier}>
+                                        <div className="font-bold" style={{ color: RARITY_COLORS[TIER_TO_RARITY[tier]] }}>等级 {tier}</div>
+                                        <div className="text-center text-slate-600">{shopProbs.probabilities.item[tier].percent.toFixed(1)}</div>
+                                        <div className="text-center text-slate-600">{shopProbs.probabilities.unit[tier].percent.toFixed(1)}</div>
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-3 italic">概率受波数和幸运值影响。</p>
+                        </div>
+                    )}
+                </div>
                 
                 {/* Shop Experience Bar */}
-                <div className="w-64">
+                <div className="w-64 mt-2">
                     <div className="flex justify-between text-[10px] text-slate-500 font-bold mb-1">
                         <span>HERO LEVEL {stats.heroLevel}</span>
                         <span>{Math.floor(stats.xp)}/{Math.floor(stats.maxXp)}</span>
@@ -220,8 +231,9 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
             {items.map(shopItem => {
                 const isUnit = shopItem.type === 'UNIT';
                 const data = shopItem.data as BrotatoItem | UnitData;
-                const rarity = isUnit ? 'COMMON' : TIER_TO_RARITY[(data as BrotatoItem).tier]; 
+                const rarity = TIER_TO_RARITY[data.tier];
                 const color = RARITY_COLORS[rarity];
+                const bgColor = RARITY_BG_COLORS[rarity];
                 const ownedCount = !isUnit ? ownedItems[(data as BrotatoItem).id] || 0 : 0;
                 const maxCount = !isUnit ? (data as BrotatoItem).max : undefined;
 
@@ -229,14 +241,14 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
                     <div 
                         key={shopItem.id}
                         className={`
-                            relative bg-white border-4 rounded-3xl p-3 flex flex-col justify-between transition-all group shadow-sm hover:shadow-xl h-full
-                            ${shopItem.bought ? 'opacity-50 grayscale bg-slate-100' : 'hover:-translate-y-2'}
+                            relative border-4 rounded-3xl p-3 flex flex-col justify-between transition-all group shadow-sm hover:shadow-xl h-full
+                            ${shopItem.bought ? 'opacity-50 grayscale !bg-slate-100 border-slate-200' : `hover:-translate-y-2 ${bgColor}`}
                         `}
-                        style={{ borderColor: shopItem.locked ? '#facc15' : 'white' }}
+                        style={{ borderColor: shopItem.locked ? '#facc15' : color }}
                     >
                         {/* Header */}
                         <div className="flex justify-between items-start mb-1">
-                           <div className="flex items-center gap-1.5 text-[10px] font-black px-2 py-1 rounded-full bg-slate-100 text-slate-500 uppercase tracking-wider">
+                           <div className="flex items-center gap-1.5 text-[10px] font-black px-2 py-1 rounded-full bg-slate-100/80 text-slate-500 uppercase tracking-wider">
                              {isUnit ? <Sword size={12}/> : <Package size={12}/>}
                              {isUnit ? (data as UnitData).type : rarity}
                            </div>
@@ -261,7 +273,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
                                     (() => {
                                         const preview = getUnitPreview(data as UnitData);
                                         return (
-                                            <div className="grid grid-cols-2 gap-1 w-full bg-slate-50 p-2 rounded-xl text-[10px] font-bold text-slate-600">
+                                            <div className="grid grid-cols-2 gap-1 w-full bg-slate-50/80 p-2 rounded-xl text-[10px] font-bold text-slate-600">
                                                 <div className="flex items-center gap-1"><span className="text-red-500">⚔️</span> {preview.damage}</div>
                                                 <div className="flex items-center gap-1"><span className="text-green-500">❤️</span> {(data as UnitData).maxHp}</div>
                                                 <div className="flex items-center gap-1"><span className="text-yellow-500">⚡</span> {preview.cooldown}s</div>
@@ -270,7 +282,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
                                         );
                                     })()
                                 ) : (
-                                    <div className="bg-slate-50 p-2 rounded-xl w-full text-[10px] font-bold text-slate-500 flex flex-col justify-center h-16 overflow-y-auto custom-scrollbar leading-tight">
+                                    <div className="bg-slate-50/80 p-2 rounded-xl w-full text-[10px] font-bold text-slate-500 flex flex-col justify-center h-16 overflow-y-auto custom-scrollbar leading-tight">
                                         <p>{(data as BrotatoItem).desc}</p>
                                     </div>
                                 )}
@@ -288,21 +300,31 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
                                 已拥有: {ownedCount} / {maxCount}
                             </div>
                         )}
-
-                        <button 
-                            onClick={() => handleBuy(shopItem)}
-                            disabled={shopItem.bought || stats.gold < shopItem.price}
-                            className={`
-                                w-full py-2.5 rounded-xl font-black flex items-center justify-center gap-2 text-xs mt-auto shadow-sm
-                                ${shopItem.bought 
-                                    ? 'bg-slate-200 text-slate-400' 
-                                    : stats.gold >= shopItem.price 
-                                        ? 'bg-green-500 hover:bg-green-400 text-white shadow-green-200' 
-                                        : 'bg-red-100 text-red-400 cursor-not-allowed'}
-                            `}
-                        >
-                            {shopItem.bought ? '已售' : <><Coins size={14}/> {shopItem.price}</>}
-                        </button>
+                        
+                        <div className="relative group/price mt-auto">
+                            <button 
+                                onClick={() => handleBuy(shopItem)}
+                                disabled={shopItem.bought || stats.gold < shopItem.price}
+                                className={`
+                                    w-full py-2.5 rounded-xl font-black flex items-center justify-center gap-2 text-xs shadow-sm
+                                    ${shopItem.bought 
+                                        ? 'bg-slate-200 text-slate-400' 
+                                        : stats.gold >= shopItem.price 
+                                            ? 'bg-green-500 hover:bg-green-400 text-white shadow-green-200' 
+                                            : 'bg-red-100 text-red-400 cursor-not-allowed'}
+                                `}
+                            >
+                                {shopItem.bought ? '已售' : <><Coins size={14}/> {shopItem.price}</>}
+                            </button>
+                            {!shopItem.bought && (stats.shopDiscount || 0) > 0 && shopItem.data.price !== shopItem.price && (
+                                <div className="hidden group-hover/price:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-slate-800 text-white p-2 rounded-lg text-xs z-10 whitespace-nowrap leading-relaxed text-left font-mono">
+                                    基础价格: {shopItem.data.price} G<br/>
+                                    全局折扣: {stats.shopDiscount}%<br/>
+                                    <span className="border-t border-slate-600 my-1 block"></span>
+                                    最终价格: {shopItem.price} G
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )
             })}
