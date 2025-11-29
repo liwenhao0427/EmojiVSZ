@@ -1,6 +1,3 @@
-
-
-
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -101,18 +98,11 @@ export class UnitSystem implements System {
 
       switch (u.attackPattern) {
           case 'THRUST':
-          case 'SWING':
               u.attackState = 'ATTACKING';
               u.attackProgress = 0;
               audioManager.play('swing', { volume: 0.3 });
               
-              const affectedEnemies = u.attackPattern === 'SWING'
-                  ? gameState.enemies.filter(e => {
-                      const dist = Math.hypot(e.x - unitX, e.y - unitY);
-                      const angle = Math.atan2(e.y - unitY, e.x - unitX);
-                      return dist <= rangeInPixels && Math.abs(angle) < Math.PI / 4 && (!e.deathTimer || e.deathTimer <= 0);
-                    })
-                  : gameState.enemies.filter(e => e.row === u.row && e.x > unitX && e.x < unitX + rangeInPixels && (!e.deathTimer || e.deathTimer <= 0));
+              const affectedEnemies = gameState.enemies.filter(e => e.row === u.row && e.x > unitX && e.x < unitX + rangeInPixels && (!e.deathTimer || e.deathTimer <= 0));
 
               affectedEnemies.forEach(e => {
                   e.hp -= damage;

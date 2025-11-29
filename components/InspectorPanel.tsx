@@ -1,6 +1,3 @@
-
-
-
 import React from 'react';
 import { InspectableEntity, Unit, StatsBreakdown } from '../types';
 import { Sword, Wind, Target, Activity, Crosshair, Heart } from 'lucide-react';
@@ -14,7 +11,6 @@ interface InspectorPanelProps {
 const ATTACK_PATTERN_MAP: Record<string, string> = {
     SHOOT: '定点射击',
     THRUST: '近战突刺',
-    SWING: '扇形挥砍',
     STREAM: '持续喷射',
     NONE: '被动/无'
 };

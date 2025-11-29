@@ -1,4 +1,3 @@
-
 # 游戏设计文档: 动物键盘侠自走棋 (v3.0)
 
 ## 1. 项目概述
@@ -73,7 +72,7 @@
     | **isDead** | 阵亡的单位在本波次中将无法行动，显示为墓碑 (🪦)。 |
     | **isTemp** | 若为 true (来自升级选项)，该单位会在战斗阶段结束后被移除。 |
     | **row, col** | 单位在网格上的位置。 |
-    | **attackPattern**| 定义单位的攻击方式，如 `SHOOT` (射击), `THRUST` (突刺), `SWING` (挥砍), `STREAM` (持续喷射), `NONE` (不攻击)。 |
+    | **attackPattern**| 定义单位的攻击方式，如 `SHOOT` (射击), `THRUST` (突刺), `STREAM` (持续喷射), `NONE` (不攻击)。 |
     | **effects** | 一个对象，用于存储单位的特殊效果，如 `generate_gold`, `explode_on_death` 等。 |
 
 *   **单位生命与复活:**

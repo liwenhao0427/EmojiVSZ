@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 // FIX: Add 'ENGINEERING' to WeaponClass to support engineering units and fix type errors.
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
@@ -43,7 +35,7 @@ export interface Unit {
 
   // New property for hero attack patterns
   attackType?: 'LINEAR' | 'TRACKING' | 'TRI_SHOT' | 'PENTA_SHOT' | 'DOUBLE_SHOT';
-  attackPattern?: 'SHOOT' | 'THRUST' | 'SWING' | 'STREAM' | 'NONE';
+  attackPattern?: 'SHOOT' | 'THRUST' | 'STREAM' | 'NONE';
   projectileEmoji?: string;
 
   // --- New properties for PvZ/Brotato mechanics ---
@@ -271,7 +263,7 @@ export interface UnitData {
   emoji: string;
   tier: number;
   type: WeaponClass;
-  attackPattern: 'SHOOT' | 'THRUST' | 'SWING' | 'STREAM' | 'NONE';
+  attackPattern: 'SHOOT' | 'THRUST' | 'STREAM' | 'NONE';
   price: number;
   damage: number;
   cd: number;
