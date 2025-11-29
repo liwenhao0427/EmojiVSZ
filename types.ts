@@ -118,6 +118,11 @@ export interface PlayerStats {
   
   // For UI feedback
   lastHarvestYield?: number | null;
+
+  // Ultimate-specific stats
+  ult_speed_mult?: number;
+  ult_dmg_bonus?: number;
+  ult_kill_extend?: number;
   
   // Index signature for dynamic item effects
   [key: string]: number | undefined | any;
@@ -204,6 +209,7 @@ export interface Projectile extends Entity {
   type: 'LINEAR' | 'ARC' | 'TRACKING';
   targetId?: number; 
   originType: WeaponClass;
+  originId?: string;
   life?: number; // for stream projectiles
   hitEnemies?: number[]; // for piercing/stream
   spawnY?: number; // for sine wave of stream

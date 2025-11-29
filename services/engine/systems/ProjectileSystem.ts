@@ -1,4 +1,5 @@
 
+
 import { GameState } from '../GameState';
 import { System } from '../System';
 import { EngineCallbacks } from '../index';
@@ -37,6 +38,7 @@ export class ProjectileSystem implements System {
         p.bounceCount = undefined;
         p.chainExplosion = undefined;
         p.pierce = undefined;
+        p.originId = undefined;
       }
     );
   }
@@ -54,6 +56,7 @@ export class ProjectileSystem implements System {
     p.type = props.type;
     p.targetId = props.targetId;
     p.originType = props.originType;
+    p.originId = props.originId;
     p.effects = props.effects;
     p.life = props.life;
     p.hitEnemies = []; // Always start with a clean slate
@@ -171,6 +174,7 @@ export class ProjectileSystem implements System {
             markedForDeletion: false,
             type: 'TRACKING',
             originType: p.originType,
+            originId: p.originId,
             effects: p.effects,
             bounceCount: p.bounceCount! - 1,
             targetId: (nearestEnemy as Enemy).id,
@@ -214,7 +218,7 @@ export class ProjectileSystem implements System {
         if (p.chainExplosion) {
              this.triggerAOE(gameState, target.x, target.y, 150, p.damage, callbacks, false);
         }
-        this.killEnemy(target, gameState, callbacks);
+        this.killEnemy(target, gameState, callbacks, p.originId);
       }
   }
 
@@ -238,7 +242,7 @@ export class ProjectileSystem implements System {
       });
   }
 
-  private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks) {
+  private killEnemy(e: Enemy, gameState: GameState, callbacks: EngineCallbacks, killerId?: string) {
     if (e.markedForDeletion || (e.deathTimer && e.deathTimer > 0)) return;
     
     e.deathTimer = 1.0; // Start 1-second death animation
@@ -247,6 +251,16 @@ export class ProjectileSystem implements System {
     const enemyData = e.name ? ENEMY_DATA[e.name] : null;
     const xp = enemyData?.xp ?? 3;
     const gold = enemyData?.gold ?? 5;
+
+    // Handle Ultimate Kill Extend
+    if (killerId) {
+        const store = useGameStore.getState();
+        const killer = store.gridUnits.find(u => u.id === killerId);
+        if (killer && killer.isHero && killer.isUlting && store.stats.ult_kill_extend) {
+            const newTimer = (killer.ultTimer || 0) + store.stats.ult_kill_extend;
+            store.setHeroUltState(true, newTimer);
+        }
+    }
 
     Log.log('战斗', `击杀了 ${e.name}！获得 ${xp} 经验和 ${gold} 金币。`);
     callbacks.onGainLoot?.(xp, gold);

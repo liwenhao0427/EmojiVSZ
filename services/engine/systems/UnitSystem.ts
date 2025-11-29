@@ -124,7 +124,7 @@ export class UnitSystem implements System {
       let cooldownTime = u.maxCooldown / Math.max(0.1, buff);
 
       if (u.isUlting) {
-          cooldownTime = cooldownTime / 10;
+          cooldownTime = cooldownTime / (store.stats.ult_speed_mult || 3);
       }
 
       this.unitCooldowns.set(u.id, cooldownTime);
@@ -170,7 +170,11 @@ export class UnitSystem implements System {
   }
   
   private calculateFinalDamage(u: Unit, stats: PlayerStats): number {
-      const heroDmgMult = u.isHero ? (1 + (stats.heroDamageMult || 0)) : 1;
+      let heroDmgMult = u.isHero ? (1 + (stats.heroDamageMult || 0)) : 1;
+      if (u.isHero && u.isUlting) {
+        heroDmgMult *= (1 + (stats.ult_dmg_bonus || 0));
+      }
+
       let flatBonus = 0;
       if (u.type === 'MELEE') flatBonus = stats.meleeDmg;
       if (u.type === 'RANGED') flatBonus = stats.rangedDmg;
@@ -239,6 +243,7 @@ export class UnitSystem implements System {
       type: projectileType,
       targetId: projectileType === 'TRACKING' && target ? target.id : undefined,
       originType: u.type,
+      originId: u.id,
       effects: u.effects,
       life: u.attackPattern === 'STREAM' ? 0.75 : undefined,
       hitEnemies: [], // Initialize for all projectiles

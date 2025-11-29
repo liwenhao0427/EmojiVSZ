@@ -1,4 +1,5 @@
 
+
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem, HeroUpgradeStatus } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../constants';
@@ -430,8 +431,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       
       // Apply permanent hero upgrades to stats for shop display
       const permStatus = state.permanentHeroUpgradeStatus;
-      baseStats.heroDamageMult = (permStatus.damage * 0.25) + (permStatus.ultimate >= 2 ? 0.25 : 0);
-      baseStats.heroAttackSpeedMult = permStatus.attackSpeed * 0.15;
+      baseStats.heroDamageMult = (permStatus.damage * 0.50);
+      baseStats.heroAttackSpeedMult = (permStatus.attackSpeed * 0.30);
+      
+      baseStats.ult_speed_mult = 3 + (permStatus.ultimate >= 1 ? 1 : 0);
+      baseStats.ult_dmg_bonus = (permStatus.ultimate >= 2 ? 0.25 : 0);
+      baseStats.ult_duration_bonus = (permStatus.ultimate >= 3 ? 1.5 : 0);
+      baseStats.ult_kill_extend = (permStatus.ultimate >= 4 ? 0.1 : 0);
 
       // Clear Wave Temporary Buffs (from in-wave level ups)
       baseStats.tempDamageMult = 0;
@@ -470,9 +476,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           
           let newEffects: Record<string, any> = {};
           if (startingStatus.effect >= 1) newEffects.is_tracking = true;
-          if (startingStatus.effect >= 2) newEffects.burn_chance = 100;
-          if (startingStatus.effect >= 3) newEffects.explode_on_hit = 1;
-          if (startingStatus.effect >= 4) newEffects.chain_explosion = 1;
+          if (startingStatus.effect >= 2) newEffects.explode_on_hit = 1;
+          if (startingStatus.effect >= 3) newEffects.chain_explosion = 1;
           
           if (startingStatus.bounce >= 1) newEffects.bounceCount = 1;
           if (startingStatus.bounce >= 2) newEffects.bounceCount = 2;
@@ -491,9 +496,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       nextStats.maxXp = state.stats.heroMaxXp;
       nextStats.lastHarvestYield = null;
       
-      // Apply Ultimate Upgrades that affect stats
-      if (startingStatus.ultimate >= 1) nextStats.ult_duration_bonus = (nextStats.ult_duration_bonus || 0) + 1;
-      if (startingStatus.ultimate >= 3) nextStats.heroEnergyGainRate = (nextStats.heroEnergyGainRate || 1.0) + 0.25;
+      // Apply Permanent Upgrades from status to live stats for the wave
+      const permStatus = state.permanentHeroUpgradeStatus;
+      nextStats.heroDamageMult = (permStatus.damage * 0.50);
+      nextStats.heroAttackSpeedMult = (permStatus.attackSpeed * 0.30);
+      
+      nextStats.ult_speed_mult = 3 + (permStatus.ultimate >= 1 ? 1 : 0);
+      nextStats.ult_dmg_bonus = (permStatus.ultimate >= 2 ? 0.25 : 0);
+      nextStats.ult_duration_bonus = (permStatus.ultimate >= 3 ? 1.5 : 0);
+      nextStats.ult_kill_extend = (permStatus.ultimate >= 4 ? 0.1 : 0);
 
       return {
         gridUnits: unitsWithResetHero,
@@ -540,6 +551,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           // These affect stats directly and aren't multipliers
           if (upgradeData.heroEnergyGainRate) nextStats.heroEnergyGainRate = (nextStats.heroEnergyGainRate || 1) + upgradeData.heroEnergyGainRate;
           if (upgradeData.extraEffects?.ult_duration_bonus) nextStats.ult_duration_bonus = (nextStats.ult_duration_bonus || 0) + upgradeData.extraEffects.ult_duration_bonus;
+          if (upgradeData.extraEffects?.ult_speed_mult_bonus) nextStats.ult_speed_mult = (nextStats.ult_speed_mult || 3) + upgradeData.extraEffects.ult_speed_mult_bonus;
+          if (upgradeData.extraEffects?.ult_dmg_bonus) nextStats.ult_dmg_bonus = (nextStats.ult_dmg_bonus || 0) + upgradeData.extraEffects.ult_dmg_bonus;
+          if (upgradeData.extraEffects?.ult_kill_extend) nextStats.ult_kill_extend = (nextStats.ult_kill_extend || 0) + upgradeData.extraEffects.ult_kill_extend;
 
           nextState.stats = nextStats;
           

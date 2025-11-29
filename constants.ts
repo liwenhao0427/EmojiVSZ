@@ -1,4 +1,5 @@
 
+
 import { PlayerStats, Unit, Rarity } from './types';
 
 export const CANVAS_WIDTH = 1200; 
@@ -48,6 +49,7 @@ export const INITIAL_STATS: PlayerStats = {
   
   heroEnergyGainRate: 1.0,
   heroMaxEnergy: 100,
+  ult_speed_mult: 6,
 };
 
 export const RARITY_COLORS: Record<string, string> = {
@@ -85,7 +87,7 @@ export const HERO_UNIT: Unit = {
   emoji: '🦸‍♂️',
   description: 'The commander. Gains energy over time to unleash a powerful ultimate attack. Its attack pattern can be upgraded.',
   type: 'RANGED',
-  damage: 25, // DPS equivalent to ~5 starting units
+  damage: 12, // DPS equivalent to ~5 starting units
   range: 99, 
   cooldown: 0,
   maxCooldown: 1.0,

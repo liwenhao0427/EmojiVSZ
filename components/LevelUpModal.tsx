@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { PlayerStats, DraftOption, Unit, WeaponClass, UnitData, HeroUpgradeStatus } from '../types';
 import { Sparkles, Sword, Zap, User, ArrowUpCircle, Flame, Target, Disc } from 'lucide-react';
@@ -38,16 +39,16 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level, isP
       switch(path) {
           case 'multishot':
               if (currentLevel === 0) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '✌️', name: '双重射击', description: '英雄每次攻击发射两枚子弹',
-                  data: { heroAttackType: 'DOUBLE_SHOT', upgradePath: 'multishot', upgradeLevel: 1 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '✌️', name: '双重射击', description: '英雄每次攻击发射两枚子弹, 但伤害降低20%',
+                  data: { heroAttackType: 'DOUBLE_SHOT', upgradePath: 'multishot', upgradeLevel: 1, heroDamage: -0.20 }
               };
               if (currentLevel === 1) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🔱', name: '三向射击', description: '英雄向三个方向发射子弹',
-                  data: { heroAttackType: 'TRI_SHOT', upgradePath: 'multishot', upgradeLevel: 2 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🔱', name: '三向射击', description: '英雄向三个方向发射子弹, 但伤害再降低20%',
+                  data: { heroAttackType: 'TRI_SHOT', upgradePath: 'multishot', upgradeLevel: 2, heroDamage: -0.20 }
               };
               if (currentLevel === 2) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🖐️', name: '五向射击', description: '英雄向五个方向发射子弹',
-                  data: { heroAttackType: 'PENTA_SHOT', upgradePath: 'multishot', upgradeLevel: 3 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🖐️', name: '五向射击', description: '英雄向五个方向发射子弹, 但伤害再降低20%',
+                  data: { heroAttackType: 'PENTA_SHOT', upgradePath: 'multishot', upgradeLevel: 3, heroDamage: -0.20 }
               };
               return null; // Maxed out
 
@@ -57,65 +58,65 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ onSelect, level, isP
                   data: { extraEffects: { is_tracking: true }, upgradePath: 'effect', upgradeLevel: 1 }
               };
               if (currentLevel === 1) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🔥', name: '燃烧射击', description: '英雄攻击造成燃烧',
-                  data: { extraEffects: { burn_chance: 100 }, upgradePath: 'effect', upgradeLevel: 2 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '💥', name: '爆炸射击', description: '英雄攻击引发爆炸',
+                  data: { extraEffects: { explode_on_hit: 1 }, upgradePath: 'effect', upgradeLevel: 2 }
               };
               if (currentLevel === 2) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '💥', name: '爆炸射击', description: '英雄攻击引发爆炸',
-                  data: { extraEffects: { explode_on_hit: 1 }, upgradePath: 'effect', upgradeLevel: 3 }
-              };
-              if (currentLevel === 3) return {
                   id: uuidv4(), type: 'HERO_UPGRADE', emoji: '☢️', name: '连锁反应', description: '爆炸击杀敌人会引发二次爆炸',
-                  data: { extraEffects: { chain_explosion: 1 }, upgradePath: 'effect', upgradeLevel: 4 }
+                  data: { extraEffects: { chain_explosion: 1 }, upgradePath: 'effect', upgradeLevel: 3 }
               };
               return null;
 
           case 'bounce':
               if (currentLevel === 0) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🎾', name: '弹射 I', description: '子弹弹射 1 次',
-                  data: { extraEffects: { bounceCount: 1 }, upgradePath: 'bounce', upgradeLevel: 1 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🎾', name: '弹射 I', description: '子弹弹射 1 次, 但攻速降低10%',
+                  data: { extraEffects: { bounceCount: 1 }, upgradePath: 'bounce', upgradeLevel: 1, heroAttackSpeed: -0.10 }
               };
               if (currentLevel === 1) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🎱', name: '弹射 II', description: '子弹弹射次数 +1 (总计2次)',
-                  data: { extraEffects: { bounceCount: 2 }, upgradePath: 'bounce', upgradeLevel: 2 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🎱', name: '弹射 II', description: '子弹弹射次数 +1 (总计2次), 但攻速再降低10%',
+                  data: { extraEffects: { bounceCount: 2 }, upgradePath: 'bounce', upgradeLevel: 2, heroAttackSpeed: -0.10 }
               };
               if (currentLevel === 2) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '💫', name: '弹射 III', description: '子弹弹射次数 +2 (总计4次)',
-                  data: { extraEffects: { bounceCount: 4 }, upgradePath: 'bounce', upgradeLevel: 3 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '💫', name: '弹射 III', description: '子弹弹射次数 +2 (总计4次), 但攻速再降低10%',
+                  data: { extraEffects: { bounceCount: 4 }, upgradePath: 'bounce', upgradeLevel: 3, heroAttackSpeed: -0.10 }
               };
               if (currentLevel === 3) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🌀', name: '弹射大师', description: '子弹弹射次数 +6 (总计10次)',
-                  data: { extraEffects: { bounceCount: 10 }, upgradePath: 'bounce', upgradeLevel: 4 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🌀', name: '弹射大师', description: '子弹弹射次数 +6 (总计10次), 但攻速再降低10%',
+                  data: { extraEffects: { bounceCount: 10 }, upgradePath: 'bounce', upgradeLevel: 4, heroAttackSpeed: -0.10 }
               };
               return null;
 
           case 'ultimate':
               if (currentLevel === 0) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⏱️', name: '持久核心', description: '大招持续时间 +1s',
-                  data: { extraEffects: { ult_duration_bonus: 1 }, upgradePath: 'ultimate', upgradeLevel: 1 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🚀', name: '超频', description: '大招攻速加成提升至 +300% (4倍速)',
+                  data: { extraEffects: { ult_speed_mult_bonus: 1 }, upgradePath: 'ultimate', upgradeLevel: 1 }
               };
               if (currentLevel === 1) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⚡', name: '狂暴核心', description: '大招期间伤害 +25%',
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🔥', name: '毁灭', description: '大招期间伤害额外提升 25%',
                   data: { extraEffects: { ult_dmg_bonus: 0.25 }, upgradePath: 'ultimate', upgradeLevel: 2 }
               };
               if (currentLevel === 2) return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🔋', name: '快充核心', description: '大招充能速度 +25%',
-                  data: { heroEnergyGainRate: 0.25, upgradePath: 'ultimate', upgradeLevel: 3 }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⏱️', name: '持久', description: '大招持续时间 +1.5秒',
+                  data: { extraEffects: { ult_duration_bonus: 1.5 }, upgradePath: 'ultimate', upgradeLevel: 3 }
+              };
+               if (currentLevel === 3) return {
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '🔋', name: '虹吸', description: '大招期间每次击杀延长0.1秒持续时间',
+                  data: { extraEffects: { ult_kill_extend: 0.1 }, upgradePath: 'ultimate', upgradeLevel: 4 }
               };
               return null;
               
           case 'damage':
               // Infinite Scaling Path
               return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '💪', name: `英雄蛮力 Lv.${nextLevel}`, description: '英雄伤害 +25% (独立乘区)',
-                  data: { heroDamage: 0.25, upgradePath: 'damage', upgradeLevel: nextLevel }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '💪', name: `英雄蛮力 Lv.${nextLevel}`, description: '英雄伤害 +50% (独立乘区)',
+                  data: { heroDamage: 0.50, upgradePath: 'damage', upgradeLevel: nextLevel }
               };
               
           case 'attackSpeed':
               // Infinite Scaling Path
               return {
-                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⚡️', name: `神经加速 Lv.${nextLevel}`, description: '英雄攻速 +15% (独立乘区)',
-                  data: { heroAttackSpeed: 0.15, upgradePath: 'attackSpeed', upgradeLevel: nextLevel }
+                  id: uuidv4(), type: 'HERO_UPGRADE', emoji: '⚡️', name: `神经加速 Lv.${nextLevel}`, description: '英雄攻速 +30% (独立乘区)',
+                  data: { heroAttackSpeed: 0.30, upgradePath: 'attackSpeed', upgradeLevel: nextLevel }
               };
               
           default: 
