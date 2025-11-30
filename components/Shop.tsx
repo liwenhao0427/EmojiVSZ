@@ -1,17 +1,14 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ShopItem, BrotatoItem, UnitData } from '../types';
 import { RARITY_COLORS, TIER_TO_RARITY, PRICE_MULTIPLIER, CELL_SIZE, RARITY_BG_COLORS } from '../constants';
-// FIX: Change 'Dice' to 'Dice1' as 'Dice' is not an exported member of 'lucide-react'.
 import { Lock, RefreshCw, ShoppingBag, Coins, ChevronDown, Package, Sword, TrendingUp, Dice1 } from 'lucide-react';
 import { useGameStore } from '../store/useGameStore';
-// FIX: Changed import from non-existent itemGenerator.ts to shopLogic.ts and updated function name.
 import { rollShop, getShopProbabilities } from '../services/shopLogic';
 import { UNIT_DATA } from '../data/units';
 import { InventoryPanel } from './InventoryPanel';
 import { Log } from '../services/Log';
+import { audioManager } from '../services/audioManager';
 
 interface ShopProps {
   isVisible: boolean;
@@ -21,7 +18,7 @@ interface ShopProps {
 const UNIT_ID_POOL = Object.keys(UNIT_DATA);
 
 export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => {
-  const { stats, addUnit, ownedItems, buyBrotatoItem, buyExperience } = useGameStore();
+  const { stats, ownedItems, buyBrotatoItem, buyExperience, buyUnit } = useGameStore();
   const [items, setItems] = useState<ShopItem[]>([]);
   const [rerollCount, setRerollCount] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -40,8 +37,6 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
 
 
   const generateShop = (keepLocked = true) => {
-    // FIX: Refactored shop generation to use the `rollShop` function from `shopLogic.ts`.
-    // This new logic preserves locked items and fills the remaining slots with new items.
     const lockedItems = keepLocked ? items.filter(i => i.locked && !i.bought) : [];
     const rolledItems = rollShop(stats.wave, stats.luck, ownedItems, stats.shopDiscount || 0);
 
@@ -78,9 +73,8 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
             buyBrotatoItem({ ...itemData, price: shopItem.price }); 
             shopItem.bought = true;
         } else {
-             const placed = addUnit(shopItem.data as UnitData);
+             const placed = buyUnit(shopItem.data as UnitData, shopItem.price);
             if (placed) {
-                useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold - shopItem.price }}));
                 shopItem.bought = true;
                 setFeedback(null);
             } else {
@@ -95,6 +89,7 @@ export const Shop: React.FC<ShopProps> = ({ isVisible, onVisibilityChange }) => 
   const handleReroll = () => {
     if (stats.gold >= rerollCost) {
         Log.event('商店', `玩家刷新了商店，花费 ${rerollCost} 金币。`);
+        audioManager.play('ui_click', { volume: 0.5 });
         if (rerollCost > 0) {
             useGameStore.setState(s => ({ stats: { ...s.stats, gold: s.stats.gold - rerollCost }}));
         }

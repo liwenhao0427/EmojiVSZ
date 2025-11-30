@@ -1,3 +1,5 @@
+import { SOUND_DATA_URIS } from '../audio/sounds';
+
 class AudioManager {
   private static instance: AudioManager;
   private audioContext: AudioContext | null = null;
@@ -15,6 +17,7 @@ class AudioManager {
   }
   
   private initContext() {
+      // Allow interaction to create AudioContext
       if (this.audioContext) return;
       try {
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -50,9 +53,11 @@ class AudioManager {
   }
 
   public play(key: string, options: { loop?: boolean, volume?: number } = {}) {
+    // Lazy init context on first play attempt
     this.initContext();
     if (!this.audioContext || !this.buffers.has(key)) return;
     
+    // Browsers require user interaction to start AudioContext
     if (this.audioContext.state === 'suspended') {
         this.audioContext.resume();
     }
@@ -101,13 +106,7 @@ class AudioManager {
   }
 }
 
-export const SOUND_MAP = {
-    // Upbeat, casual polka-style loop suitable for SAP-like games
-    music: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/345_polka_loop.mp3', 
-    shoot: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/plop.mp3', 
-    hit: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/hit_cartoon.mp3',
-    death: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/cartoon_fail.mp3',
-    swing: 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/217233/whoosh.mp3'
-};
+// Use the embedded sound data URIs
+export const SOUND_MAP = SOUND_DATA_URIS;
 
 export const audioManager = AudioManager.getInstance();

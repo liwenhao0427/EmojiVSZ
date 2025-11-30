@@ -1,4 +1,3 @@
-// FIX: Add 'ENGINEERING' to WeaponClass to support engineering units and fix type errors.
 export type WeaponClass = 'MELEE' | 'RANGED' | 'MAGIC' | 'ENGINEERING';
 
 export type Rarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';

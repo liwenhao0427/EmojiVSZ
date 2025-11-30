@@ -1,7 +1,3 @@
-
-
-
-
 import { GameState } from '../GameState';
 import { Unit, InspectableEntity, Enemy } from '../../../types';
 import { GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../constants';
@@ -293,7 +289,6 @@ export class RenderingSystem {
       
       const heroDmgMult = u.isHero ? (1 + (stats.heroDamageMult || 0)) : 1;
       const globalDmgMult = (1 + (stats.damagePercent || 0)) * (1 + (stats.tempDamageMult || 0));
-      // FIX: Changed property from `damage` to `baseDamage` to match Unit type.
       const finalDamage = Math.round((u.baseDamage + flatBonus) * globalDmgMult * heroDmgMult);
 
       // Damage (Left, Yellow)

@@ -1,6 +1,3 @@
-
-
-
 import { create } from 'zustand';
 import { PlayerStats, Unit, GamePhase, DraftOption, AmmoBayState, InspectableEntity, BrotatoItem, UnitData, AmmoItem, HeroUpgradeStatus } from '../types';
 import { INITIAL_STATS, HERO_UNIT, GRID_ROWS, GRID_COLS, CELL_SIZE, GRID_OFFSET_X, GRID_OFFSET_Y } from '../constants';
@@ -8,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ITEMS_DATA } from '../data/items';
 import { UNIT_DATA } from '../data/units';
 import { Log } from '../services/Log';
+import { audioManager } from '../services/audioManager';
 
 // A mapping from item stat keys to player stat keys
 const STAT_KEY_MAP: Record<string, string> = {
@@ -44,6 +42,7 @@ interface GameStore {
   initGame: () => void;
   moveUnit: (unitId: string, targetRow: number, targetCol: number) => void;
   addUnit: (item: UnitData | Partial<Unit>) => boolean;
+  buyUnit: (item: UnitData, price: number) => boolean;
   applyDraft: (option: DraftOption, isPermanent?: boolean) => void;
   setInspectedEntity: (entity: InspectableEntity) => void;
   buyBrotatoItem: (item: BrotatoItem) => void;
@@ -161,7 +160,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
     }
 
-// FIX: Changed Log.i to Log.log as 'i' method does not exist.
     Log.log('Store', 'initGame: Resetting all stats and units for a new game.');
     set({
       stats: { ...INITIAL_STATS, wave: 1, gold: 10, heroLevel: 1 }, 
@@ -222,6 +220,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return false;
   },
   
+  buyUnit: (item, price) => {
+      const { stats, addUnit } = get();
+      if (stats.gold < price) return false;
+
+      const placed = addUnit(item);
+      if (placed) {
+          audioManager.play('coin', { volume: 0.3 });
+          set(s => ({ stats: { ...s.stats, gold: s.stats.gold - price } }));
+          return true;
+      }
+      return false;
+  },
+  
   sellUnit: (unitId: string) => {
       const { gridUnits, stats } = get();
       const unitIndex = gridUnits.findIndex(u => u.id === unitId);
@@ -236,6 +247,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const refund = Math.floor(unitData.price * 0.5);
       
       Log.event('战场', `玩家出售了单位 ${unit.name}，获得 ${refund} 金币。`);
+      audioManager.play('coin', { volume: 0.3 });
 
       set({
           stats: { ...stats, gold: stats.gold + refund },
@@ -251,6 +263,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   buyExperience: (amount, cost) => {
       set(state => {
           if (state.stats.gold < cost) return {};
+          
+          audioManager.play('coin', { volume: 0.3 });
           
           let newXp = state.stats.heroXp + amount;
           let newMaxXp = state.stats.heroMaxXp;
@@ -289,6 +303,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(state => {
       const currentGold = state.stats.gold;
       if (currentGold < item.price) return {};
+      
+      audioManager.play('coin', { volume: 0.3 });
 
       const newOwnedItems = { ...state.ownedItems };
       newOwnedItems[item.id] = (newOwnedItems[item.id] || 0) + 1;
@@ -415,7 +431,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   endWaveAndGoToShop: () => {
     set(state => {
-// FIX: Changed Log.i to Log.log as 'i' method does not exist.
       Log.log('Store', `endWaveAndGoToShop: phase -> SHOP.`);
       
       const harvestingGold = Math.floor(state.stats.harvesting || 0);
@@ -462,8 +477,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   startNextWave: () => {
+    audioManager.play('wave_start');
     set(state => {
-// FIX: Changed Log.i to Log.log as 'i' method does not exist.
       Log.log('Store', `startNextWave: phase -> COMBAT, wave -> ${state.stats.wave + 1}.`);
       
       const startingStatus = { ...state.permanentHeroUpgradeStatus };

@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { AmmoItem } from '../../types';
 import { RARITY_COLORS, KEYWORD_DEFINITIONS, AMMO_TYPE_MAP } from '../../constants';
@@ -36,13 +34,9 @@ export const AmmoDetailCard: React.FC<{ item: AmmoItem; isPinned: boolean; onClo
   if (item.weaponClass === 'MELEE') flatBonus = stats.meleeDmg;
   if (item.weaponClass === 'RANGED') flatBonus = stats.rangedDmg;
   if (item.weaponClass === 'MAGIC') flatBonus = stats.elementalDmg; 
-  // FIX: Added safe access for engineering stat and corrected damage calculation logic.
   if (item.weaponClass === 'ENGINEERING') flatBonus = stats.engineering || 0;
   const finalDamage = Math.round((item.damage + flatBonus) * (1 + (stats.damagePercent || 0)));
 
-  // Attack Speed (Seconds per shot)
-  // Formula: Cooldown / (1 + AtkSpeed%)
-  // FIX: Corrected attack speed calculation logic.
   const finalCooldown = item.cooldown / (1 + (stats.attackSpeed || 0));
 
   const generateDescription = () => {
@@ -99,7 +93,6 @@ export const AmmoDetailCard: React.FC<{ item: AmmoItem; isPinned: boolean; onClo
                     <div className="text-white font-mono text-sm">{finalDamage}</div>
                 </div>
                 {/* Tooltip */}
-                {/* FIX: Updated tooltip to show correct calculation. */}
                 <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 w-full bg-black/90 p-2 rounded border border-white/10 z-10 whitespace-nowrap">
                     Base: {item.damage} <br/>
                     + Flat: {flatBonus} <br/>
@@ -115,7 +108,6 @@ export const AmmoDetailCard: React.FC<{ item: AmmoItem; isPinned: boolean; onClo
                     <div className="text-white font-mono text-sm">{finalCooldown.toFixed(2)}s</div>
                 </div>
                  {/* Tooltip */}
-                 {/* FIX: Updated tooltip to show correct calculation. */}
                  <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 w-full bg-black/90 p-2 rounded border border-white/10 z-10 whitespace-nowrap">
                     Base: {item.cooldown}s <br/>
                     Player Spd: {((1 + (stats.attackSpeed || 0)) * 100).toFixed(0)}% <br/>
